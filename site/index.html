@@ -11,8 +11,9 @@
     --fg:#1c2433; --fg2:#5a6b82; --fg3:#8b99ad;
     --accent:#00a8b8; --accent-deep:#008a9a; --accent-bg:#e6f7f9;
     --ok:#12a150; --ok-bg:#e8f7ee; --warn:#d97706; --warn-bg:#fdf3e3;
+    --danger:#e5484d; --danger-bg:#fdecec;
     --star:#f5a623; --link:#2563eb;
-    --radius:12px; --radius-sm:8px;
+    --radius:12px;
     --shadow:0 1px 2px rgba(20,40,80,.04),0 2px 8px rgba(20,40,80,.05);
     --shadow-lg:0 8px 40px rgba(20,40,80,.16);
     --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
@@ -25,106 +26,146 @@
   button{font-family:inherit}
 
   /* ---------- 顶栏 ---------- */
-  header{background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
-  .head{max-width:1320px;margin:0 auto;padding:12px 26px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
-  .brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  header{background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
+  .head{max-width:1360px;margin:0 auto;padding:10px 26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;flex-shrink:0;cursor:pointer}
   .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#3ec6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;box-shadow:0 2px 6px rgba(0,168,184,.35)}
   .brand b{font-size:17px;letter-spacing:.3px}
   .brand small{display:block;font-size:11px;color:var(--fg3);font-weight:400;letter-spacing:.5px}
-  .search{flex:1;min-width:220px;max-width:560px;position:relative}
-  .search input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:9px 14px 9px 38px;font-size:14px;outline:none;color:var(--fg);transition:all .15s}
+  .search{flex:1;min-width:200px;max-width:520px;position:relative}
+  .search input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:8px 13px 8px 36px;font-size:14px;outline:none;color:var(--fg);transition:all .15s}
   .search input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(0,168,184,.12)}
   .search .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--fg3);font-size:15px}
   .stats{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
-  .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:5px 13px;font-size:12px;color:var(--fg2);display:flex;flex-direction:column;align-items:center;line-height:1.3}
-  .stat b{font-size:15px;color:var(--fg);font-variant-numeric:tabular-nums}
+  .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:4px 12px;font-size:11.5px;color:var(--fg2);display:flex;flex-direction:column;align-items:center;line-height:1.3}
+  .stat b{font-size:14.5px;color:var(--fg);font-variant-numeric:tabular-nums}
   .stat b.ok{color:var(--ok)}
 
-  /* ---------- 索引源提示条 ---------- */
   .idxbar{background:var(--accent-bg);border-bottom:1px solid rgba(0,168,184,.18)}
-  .idxbar .in{max-width:1320px;margin:0 auto;padding:7px 26px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--accent-deep);flex-wrap:wrap}
+  .idxbar .in{max-width:1360px;margin:0 auto;padding:6px 26px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--accent-deep);flex-wrap:wrap}
   .idxbar code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid rgba(0,168,184,.25);border-radius:6px;padding:2px 8px;color:var(--fg)}
   .idxbar .cp{margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer}
   .idxbar .cp:hover{background:var(--accent-deep)}
 
-  /* ---------- 主体 ---------- */
-  .wrap{max-width:1320px;margin:0 auto;padding:18px 26px 70px}
+  /* ---------- 标签页 ---------- */
+  .tabbar{background:var(--bg2);border-bottom:1px solid var(--line)}
+  .tabbar .in{max-width:1360px;margin:0 auto;padding:0 26px;display:flex;gap:4px;overflow-x:auto}
+  .tab{background:none;border:none;padding:11px 15px;font-size:14px;color:var(--fg2);cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .tab:hover{color:var(--accent-deep)}
+  .tab.active{color:var(--accent-deep);border-bottom-color:var(--accent);font-weight:600}
+  .tab .cnt{background:var(--bg3);border-radius:99px;font-size:11px;padding:1px 7px;color:var(--fg2);font-weight:600}
+  .tab.active .cnt{background:var(--accent-bg);color:var(--accent-deep)}
+  .tab.right{margin-left:auto}
 
-  /* 分类横排 */
-  .cats{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  /* ---------- 主体 ---------- */
+  .wrap{max-width:1360px;margin:0 auto;padding:16px 26px 100px}
+
+  .cats{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px}
   .cat{background:var(--bg2);border:1px solid var(--line);border-radius:99px;padding:5px 13px;font-size:12.5px;color:var(--fg2);cursor:pointer;transition:all .13s;white-space:nowrap;display:flex;align-items:center;gap:5px}
   .cat:hover{border-color:var(--accent);color:var(--accent-deep)}
   .cat.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
   .cat .n{font-size:10.5px;opacity:.75}
   .cat.active .n{opacity:.9}
 
-  /* 工具栏 */
-  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:11px;flex-wrap:wrap}
   .toolbar .spacer{flex:1}
-  select,.btn{background:var(--bg2);border:1px solid var(--line2);color:var(--fg2);padding:6.5px 11px;border-radius:8px;font-size:12.5px;cursor:pointer;font-family:inherit}
-  select:focus{outline:none;border-color:var(--accent)}
+  .btn{background:var(--bg2);border:1px solid var(--line2);color:var(--fg2);padding:6.5px 12px;border-radius:8px;font-size:12.5px;cursor:pointer}
   .btn:hover{border-color:var(--accent);color:var(--accent-deep)}
   .btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep);font-weight:600}
-  .fgroup{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .fchip{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer;transition:all .13s;user-select:none}
   .fchip:hover{border-color:var(--accent)}
   .fchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep);font-weight:600}
+  .view-switch{display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+  .view-switch button{background:var(--bg2);border:none;padding:6px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer}
+  .view-switch button.on{background:var(--accent);color:#fff}
   .count-line{font-size:12.5px;color:var(--fg3);margin:0 4px 10px}
   .count-line b{color:var(--fg2)}
+  .note-line{font-size:12px;color:var(--fg3);background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin-bottom:12px}
   .loading{text-align:center;color:var(--fg3);padding:70px 0;font-size:13.5px}
   .loading .spin{display:inline-block;width:18px;height:18px;border:2.5px solid var(--line2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-4px;margin-right:9px}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ---------- 列表视图（默认） ---------- */
+  /* ---------- 列表 ---------- */
   .rows{display:flex;flex-direction:column;gap:8px}
-  .row{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:13px 16px;display:grid;grid-template-columns:1fr auto;gap:8px 18px;cursor:pointer;transition:all .14s;box-shadow:var(--shadow)}
+  .row{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:12px 15px;display:grid;grid-template-columns:1fr auto;gap:8px 16px;cursor:pointer;transition:all .14s;box-shadow:var(--shadow)}
   .row:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(0,168,184,.13);transform:translateY(-1px)}
   .row-main{min-width:0}
-  .row-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+  .row-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px}
   .pname{font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--fg)}
   .badge{font-size:10.5px;padding:1px 7px;border-radius:99px;border:1px solid;flex-shrink:0;font-weight:600}
   .badge.npm{color:var(--ok);border-color:rgba(18,161,80,.35);background:var(--ok-bg)}
   .badge.git{color:var(--warn);border-color:rgba(217,119,6,.35);background:var(--warn-bg)}
   .badge.off{color:var(--accent-deep);border-color:rgba(0,168,184,.35);background:var(--accent-bg)}
   .badge.new{color:#7c3aed;border-color:rgba(124,58,237,.35);background:#f5f0ff}
+  .badge.ver{color:var(--fg2);border-color:var(--line2);background:var(--bg3);font-family:var(--mono)}
+  .badge.dl{color:var(--link);border-color:rgba(37,99,235,.3);background:#eef4ff}
   .pdesc{font-size:13px;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .row-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
   .tag{font-size:11px;color:var(--fg2);background:var(--bg3);border:1px solid var(--line);padding:1px 8px;border-radius:6px}
   .cat-tag{font-size:11px;color:var(--accent-deep);background:var(--accent-bg);padding:1px 9px;border-radius:6px;font-weight:500}
-  .row-meta{display:flex;align-items:center;gap:14px;margin-top:7px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
-  .row-meta .stars{color:var(--star);font-weight:600;display:flex;align-items:center;gap:3px}
+  .row-meta{display:flex;align-items:center;gap:13px;margin-top:6px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
+  .row-meta .stars{color:var(--star);font-weight:600}
   .row-meta .stars::before{content:"★"}
-  .row-meta .upd::before{content:"⟳ ";opacity:.7}
-  .row-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:8px}
-  .install-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12.5px;cursor:pointer;font-weight:600;transition:all .13s;white-space:nowrap}
+  .row-meta .upd::before{content:"⟳ "}
+  .row-meta .vf::before{content:"✓ DSH ";color:var(--ok);font-weight:600}
+  .row-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:7px}
+  .install-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 16px;font-size:12.5px;cursor:pointer;font-weight:600;transition:all .13s;white-space:nowrap}
   .install-btn:hover{background:var(--accent-deep)}
   .install-btn:disabled,.install-btn.pending{background:var(--bg3);color:var(--fg3);cursor:not-allowed}
-  .favorite{background:none;border:none;font-size:17px;cursor:pointer;color:var(--line2);line-height:1;transition:all .13s;padding:2px}
-  .favorite.on{color:#ef4444}
-  .favorite:hover{transform:scale(1.15)}
+  .ops{display:flex;gap:4px}
+  .op{width:27px;height:27px;border-radius:7px;border:1px solid var(--line);background:var(--bg2);color:var(--fg3);font-size:13px;cursor:pointer;line-height:1;transition:all .12s}
+  .op:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .op.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep)}
+  .op.danger:hover{border-color:var(--danger);color:var(--danger)}
 
-  /* ---------- 卡片视图 ---------- */
-  .grid{display:none;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
-  .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:15px;cursor:pointer;transition:all .14s;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)}
+  /* ---------- 卡片 ---------- */
+  .grid{display:none;grid-template-columns:repeat(auto-fill,minmax(305px,1fr));gap:12px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;transition:all .14s;display:flex;flex-direction:column;gap:7px;box-shadow:var(--shadow)}
   .card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,168,184,.14)}
-  .card .ctop{display:flex;align-items:center;gap:8px;min-width:0}
+  .card .ctop{display:flex;align-items:center;gap:7px;min-width:0}
   .card .pname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .card .favorite{margin-left:auto}
   .card .pdesc{flex:1}
-  .card .cmeta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--fg3)}
+  .card .cmeta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
   .card .stars{color:var(--star);font-weight:600}
   .card .stars::before{content:"★"}
-  .card .install-btn{width:100%;text-align:center;margin-top:4px}
-
-  /* 视图切换 */
-  .view-switch{display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
-  .view-switch button{background:var(--bg2);border:none;padding:6px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer}
-  .view-switch button.on{background:var(--accent);color:#fff}
+  .card .install-btn{width:100%;text-align:center;margin-top:3px}
+  .card .ops{justify-content:flex-end;width:100%}
 
   .more-wrap{text-align:center;margin-top:22px}
   #more{padding:9px 36px;border-radius:9px;border:1px solid var(--accent);background:#fff;color:var(--accent-deep);font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:600}
   #more:hover{background:var(--accent-bg)}
   .empty{text-align:center;color:var(--fg3);padding:60px 0;font-size:14px}
+
+  /* ---------- 待装栏 ---------- */
+  .dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow-lg);z-index:60;width:min(640px,94vw);overflow:hidden}
+  .dock-head{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;user-select:none}
+  .dock-head:hover{background:var(--bg)}
+  .dock-head .ttl{font-size:13.5px;font-weight:600}
+  .dock-head .ttl .n{background:var(--accent);color:#fff;border-radius:99px;padding:0 8px;font-size:11.5px;margin-left:5px}
+  .dock-head .spacer{flex:1}
+  .dock-head .copyall{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:5px 13px;font-size:12px;cursor:pointer;font-weight:600}
+  .dock-body{display:none;border-top:1px solid var(--line);max-height:260px;overflow:auto}
+  .dock.open .dock-body{display:block}
+  .dq{display:flex;align-items:center;gap:9px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .dq:last-child{border-bottom:none}
+  .dq .nm{font-family:var(--mono);font-weight:600;flex-shrink:0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dq .cmd{flex:1;font-family:var(--mono);font-size:11.5px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dq .rm{background:none;border:none;color:var(--fg3);cursor:pointer;font-size:15px;line-height:1}
+  .dq .rm:hover{color:var(--danger)}
+
+  /* ---------- 筛选面板 ---------- */
+  .panel-mask{position:fixed;inset:0;background:rgba(23,35,55,.32);display:none;z-index:80}
+  .panel-mask.show{display:block}
+  .panel{position:fixed;top:0;right:0;bottom:0;width:300px;background:#fff;z-index:81;box-shadow:-8px 0 30px rgba(20,40,80,.15);padding:20px 20px 30px;overflow:auto;transform:translateX(102%);transition:transform .18s ease}
+  .panel.show{transform:none}
+  .panel h3{font-size:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+  .panel h3 .x{background:none;border:none;color:var(--fg3);font-size:20px;cursor:pointer;line-height:1}
+  .pg{margin-bottom:18px}
+  .pg .k{font-size:11.5px;color:var(--fg3);margin-bottom:6px;font-weight:600}
+  .pg .opts{display:flex;flex-wrap:wrap;gap:6px}
+  .popt{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 11px;font-size:12px;color:var(--fg2);cursor:pointer}
+  .popt:hover{border-color:var(--accent)}
+  .popt.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 
   /* ---------- 详情弹层 ---------- */
   .mask{position:fixed;inset:0;background:rgba(23,35,55,.42);backdrop-filter:blur(3px);display:none;z-index:100;align-items:center;justify-content:center;padding:20px}
@@ -155,8 +196,23 @@
   .m-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
   .m-tags .tag{font-size:11.5px;padding:2px 10px;border-radius:99px}
 
-  footer{max-width:1320px;margin:0 auto;padding:0 26px 34px;color:var(--fg3);font-size:12px;display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between}
+  /* ---------- 高级页 ---------- */
+  .adv{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+  .acard{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:17px 19px;box-shadow:var(--shadow)}
+  .acard h4{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+  .acard .kv{font-size:12.5px;color:var(--fg2);display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .acard .kv:last-child{border-bottom:none}
+  .acard .kv b{color:var(--fg);font-variant-numeric:tabular-nums}
+  .acard .act{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .acard .act .btn{padding:7px 15px;font-size:12.5px}
+  .acard .desc{font-size:12px;color:var(--fg3);margin-top:8px}
+
+  footer{max-width:1360px;margin:0 auto;padding:0 26px 34px;color:var(--fg3);font-size:12px;display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between}
   footer code{font-family:var(--mono);font-size:11px;background:#fff;border:1px solid var(--line);padding:1px 7px;border-radius:5px;color:var(--fg2)}
+
+  /* ---------- Toast ---------- */
+  .toast{position:fixed;top:74px;left:50%;transform:translateX(-50%);background:var(--fg);color:#fff;border-radius:9px;padding:8px 18px;font-size:12.5px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:var(--shadow-lg)}
+  .toast.show{opacity:1}
 
   @media(max-width:900px){
     .head{gap:12px}
@@ -169,14 +225,13 @@
 
 <header>
   <div class="head">
-    <div class="brand"><div class="logo">D</div><div><b>DSH 插件商店</b><small>Plugin Store</small></div></div>
+    <div class="brand" onclick="setTab('discover')"><div class="logo">D</div><div><b>DSH 插件商店</b><small>Plugin Store</small></div></div>
     <div class="search"><span class="ic">⌕</span>
       <input id="q" type="text" placeholder="搜索插件名称 / 描述 / 标签…" autocomplete="off">
     </div>
     <div class="stats">
-      <div class="stat">共 <b id="st-total">-</b> 个</div>
+      <div class="stat">共 <b id="st-total">-</b></div>
       <div class="stat">可装 <b class="ok" id="st-ok">-</b></div>
-      <div class="stat">官方 <b id="st-off">-</b></div>
       <div class="stat">新增 <b id="st-new">-</b></div>
       <div class="stat">更新 <b id="st-upd" style="font-size:11px">-</b></div>
     </div>
@@ -186,23 +241,18 @@
     <span style="color:var(--fg3)">DSH → Plugins → Discover → Index sources 粘贴即可浏览安装</span>
     <button class="cp" id="cp-idx">复制</button>
   </div></div>
+  <div class="tabbar"><div class="in" id="tabbar"></div></div>
 </header>
 
 <div class="wrap">
-  <div class="cats" id="cats"></div>
+  <div id="cats-zone" class="cats"></div>
 
-  <div class="toolbar">
-    <select id="sort">
-      <option value="stars">按 Star 排序</option>
-      <option value="updated">按最近更新</option>
-      <option value="name">按名称</option>
-      <option value="new">按收录时间</option>
-    </select>
-    <div class="fgroup">
+  <div id="toolbar" class="toolbar">
+    <button class="btn" id="btn-filter">⚙ 筛选</button>
+    <div class="fgroup" id="quick-filters">
       <button class="fchip" data-f="inst">只看可安装</button>
       <button class="fchip" data-f="off">只看官方</button>
       <button class="fchip" data-f="new">7 天内新增</button>
-      <button class="fchip" data-f="fav">我的收藏</button>
     </div>
     <div class="spacer"></div>
     <div class="view-switch">
@@ -211,14 +261,29 @@
     </div>
   </div>
 
-  <div class="count-line">显示 <b id="shown">0</b> / <b id="total">0</b> 个插件</div>
-  <div class="loading" id="loading"><span class="spin"></span>正在加载插件数据…</div>
+  <div class="count-line" id="count-line"></div>
+  <div id="note-line" class="note-line" style="display:none"></div>
 
   <div class="rows" id="rows"></div>
   <div class="grid" id="grid"></div>
 
   <div class="more-wrap"><button id="more">加载更多</button></div>
-  <div class="empty" id="empty" style="display:none">没有匹配的插件<br><span style="font-size:12px">换个关键词或清除筛选试试</span></div>
+  <div class="empty" id="empty" style="display:none"></div>
+
+  <div class="loading" id="loading" style="display:none"><span class="spin"></span>正在加载插件数据…</div>
+
+  <div class="adv" id="adv" style="display:none"></div>
+</div>
+
+<!-- 待装栏 -->
+<div class="dock" id="dock">
+  <div class="dock-head" onclick="toggleDock()">
+    <span class="ttl">⤓ 待安装<span class="n" id="qcnt">0</span></span>
+    <span style="font-size:11px;color:var(--fg3)" id="qhint">点插件上的 ⤓ 加入待装清单，一起复制安装命令</span>
+    <span class="spacer"></span>
+    <button class="copyall" id="copy-all" onclick="copyAllQueue(event)">复制全部命令</button>
+  </div>
+  <div class="dock-body" id="dock-body"></div>
 </div>
 
 <footer>
@@ -226,6 +291,18 @@
   <div>安装：<code>dsh plugin add &lt;name&gt;</code> · <code>dsh plugin add github:&lt;owner/repo&gt;</code></div>
 </footer>
 
+<!-- 筛选面板 -->
+<div class="panel-mask" id="panel-mask"></div>
+<div class="panel" id="panel">
+  <h3>筛选与排序 <button class="x" onclick="closePanel()">&times;</button></h3>
+  <div class="pg"><div class="k">排序字段</div><div class="opts" id="pg-sort"></div></div>
+  <div class="pg"><div class="k">排序方向</div><div class="opts" id="pg-dir"></div></div>
+  <div class="pg"><div class="k">收录时间范围</div><div class="opts" id="pg-since"></div></div>
+  <div class="pg"><div class="k">来源</div><div class="opts" id="pg-src"></div></div>
+  <div class="pg"><div class="k">条件</div><div class="opts" id="pg-cond"></div></div>
+</div>
+
+<!-- 详情弹层 -->
 <div class="mask" id="mask">
   <div class="modal">
     <button class="close" id="close">&times;</button>
@@ -246,59 +323,118 @@
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const PAGE = 40;
-let DATA = null, shownCount = 0, view = "row";
-const state = { q:"", cat:"all", sort:"stars", filters:new Set() };
+let DATA = null, shownCount = 0, modalIdx = -1, modalLang = "zh";
+const state = { tab:"discover", q:"", cat:"all", sort:"stars", dir:"desc", since:"all", src:"all",
+                filters:new Set(), view:"row" };
+const SORTS = [["downloads","下载量(近30天)"],["stars","Star 数"],["added","收录时间"],["updated","最近更新"],["name","名称"]];
+const SINCES = [["all","全部时间"],["1d","最近1天"],["7d","最近7天"],["30d","最近30天"],["90d","最近90天"],["1y","最近1年"]];
+const SRCS = [["all","全部来源"],["npm","npm"],["git","GitHub"]];
+const CONDS = [["inst","可安装"],["off","官方"],["new","7天内新增"],["fav","收藏"],["installed","已安装"]];
+
 let favs = new Set(JSON.parse(localStorage.getItem("dsh-favs")||"[]"));
-let modalIdx = -1, modalLang = "zh";
+let installed = new Set(JSON.parse(localStorage.getItem("dsh-installed")||"[]"));
+let blocked = new Set(JSON.parse(localStorage.getItem("dsh-blocked")||"[]"));
+let queue = new Set(JSON.parse(localStorage.getItem("dsh-queue")||"[]"));
+
+function save(key, set){ localStorage.setItem(key, JSON.stringify([...set])); }
+function toast(msg){ const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 1800); }
+function fmtN(n){
+  if (!n) return "0";
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,"") + "M";
+  if (n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,"") + "k";
+  return String(n);
+}
 
 async function load(){
   const loading = document.getElementById("loading");
+  loading.style.display = "block";
   try {
     const r = await fetch("data/plugins.json");
     if (!r.ok) throw new Error("HTTP " + r.status);
     DATA = await r.json();
-  const off = DATA.plugins.filter(p=>p.official).length;
-  const seven = DATA.plugins.filter(isNew).length;
-  document.getElementById("st-total").textContent = DATA.total;
-  document.getElementById("st-ok").textContent = DATA.installable;
-  document.getElementById("st-off").textContent = off;
-  document.getElementById("st-new").textContent = seven;
-  document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
-  const base = location.pathname.replace(/[^/]*$/,"");
-  document.getElementById("idx-url").textContent = location.origin + base + "index.json";
-  loading.style.display = "none";
-  renderCats(); render();
+    const seven = DATA.plugins.filter(isNew).length;
+    document.getElementById("st-total").textContent = DATA.total;
+    document.getElementById("st-ok").textContent = DATA.installable;
+    document.getElementById("st-new").textContent = seven;
+    document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
+    const base = location.pathname.replace(/[^/]*$/,"");
+    document.getElementById("idx-url").textContent = location.origin + base + "index.json";
+    loading.style.display = "none";
+    buildTabbar(); render();
   } catch(e){
     loading.innerHTML = "数据加载失败（" + esc(e.message) + "）<br><span style='font-size:12px'>请检查网络后刷新重试</span>";
   }
 }
 function isNew(p){
   const a = (p.added||"").slice(0,10);
-  if(!a) return false;
-  const t = Date.now() - new Date(a+"T00:00:00").getTime();
-  return t < 7*864e5;
+  if (!a) return false;
+  return (Date.now() - new Date(a+"T00:00:00").getTime()) < 7*864e5;
 }
-function renderCats(){
-  const el = document.getElementById("cats");
-  let html = `<button class="cat${state.cat==="all"?" active":""}" data-cat="all">全部 <span class="n">${DATA.total}</span></button>`;
-  for (const [k,c] of Object.entries(DATA.categories)){
-    html += `<button class="cat${state.cat===k?" active":""}" data-cat="${k}">${c.zh} <span class="n">${c.count}</span></button>`;
+function sinceOk(p){
+  const a = (p.added||"").slice(0,10);
+  if (!a || state.since==="all") return true;
+  const days = {"1d":1,"7d":7,"30d":30,"90d":90,"1y":365}[state.since];
+  return (Date.now() - new Date(a+"T00:00:00").getTime()) < days*864e5;
+}
+
+/* ---------- 标签页 ---------- */
+function buildTabbar(){
+  const el = document.getElementById("tabbar");
+  const tabs = [
+    ["discover","发现",""],
+    ["theme","主题",""],
+    ["fav","收藏",favs.size],
+    ["installed","已安装",installed.size],
+    ["blocked","已屏蔽",blocked.size],
+    ["advanced","高级",""],
+  ];
+  el.innerHTML = tabs.map(([id,label,cnt])=>
+    `<button class="tab${state.tab===id?" active":""}" data-tab="${id}">${label}${cnt!==undefined&&cnt>0?`<span class="cnt">${cnt}</span>`:""}</button>`
+  ).join("");
+  el.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+}
+function setTab(t){
+  state.tab = t;
+  state.cat = "all";
+  buildTabbar(); render();
+}
+function tabsPluginCount(){ /* 供 tabbar 计数刷新 */ }
+
+/* ---------- 筛选 ---------- */
+function isThemePlugin(p){
+  return p.cat==="interface" || (p.tags||[]).some(t=>/theme|appearance|skin|look/i.test(t));
+}
+function baseList(){
+  let list;
+  if (state.tab==="fav") list = DATA.plugins.filter(p=>favs.has(p.name));
+  else if (state.tab==="installed") list = DATA.plugins.filter(p=>installed.has(p.name));
+  else if (state.tab==="blocked") list = DATA.plugins.filter(p=>blocked.has(p.name));
+  else {
+    list = DATA.plugins.filter(p=>!blocked.has(p.name));
+    if (state.tab==="theme") list = list.filter(isThemePlugin);
   }
-  el.innerHTML = html;
-  el.querySelectorAll(".cat").forEach(b=>b.onclick=()=>{ state.cat=b.dataset.cat; renderCats(); render(); });
+  return list;
 }
 function filtered(){
-  const q = state.q.trim().toLowerCase();
-  let list = DATA.plugins;
-  if (state.cat!=="all") list = list.filter(p=>p.cat===state.cat);
-  for (const f of state.filters){
-    if (f==="inst") list = list.filter(p=>p.installable);
-    if (f==="off") list = list.filter(p=>p.official);
-    if (f==="new") list = list.filter(isNew);
-    if (f==="fav") list = list.filter(p=>favs.has(p.name));
+  let list = baseList();
+  if (state.tab==="discover" || state.tab==="theme"){
+    if (state.cat!=="all") list = list.filter(p=>p.cat===state.cat);
+    if (state.src==="npm") list = list.filter(p=>p.source==="npm");
+    if (state.src==="git") list = list.filter(p=>p.source==="git");
+    if (state.since!=="all") list = list.filter(sinceOk);
+    for (const f of state.filters){
+      if (f==="inst") list = list.filter(p=>p.installable);
+      if (f==="off") list = list.filter(p=>p.official);
+      if (f==="new") list = list.filter(isNew);
+      if (f==="fav") list = list.filter(p=>favs.has(p.name));
+      if (f==="installed") list = list.filter(p=>installed.has(p.name));
+    }
   }
+  const q = state.q.trim().toLowerCase();
   if (q){
     list = list.filter(p =>
       (p.name||"").toLowerCase().includes(q) ||
@@ -307,23 +443,52 @@ function filtered(){
       (p.descEn||"").toLowerCase().includes(q) ||
       (p.tags||[]).some(t=>t.toLowerCase().includes(q)));
   }
-  const s = state.sort;
+  const s = state.sort, d = state.dir==="desc" ? 1 : -1;
   list.sort((a,b)=>{
-    if (s==="stars") return (b.stars||0)-(a.stars||0);
-    if (s==="updated") return (b.updated||"").localeCompare(a.updated||"");
-    if (s==="new") return (b.added||"").localeCompare(a.added||"");
-    return (a.name||"").localeCompare(b.name||"");
+    let v = 0;
+    if (s==="downloads") v = (b.downloads||0)-(a.downloads||0);
+    else if (s==="stars") v = (b.stars||0)-(a.stars||0);
+    else if (s==="added") v = (b.added||"").localeCompare(a.added||"");
+    else if (s==="updated") v = (b.updated||"").localeCompare(a.updated||"");
+    else v = (a.name||"").localeCompare(b.name||"");
+    return v * d;
   });
   return list;
 }
+
+/* ---------- 渲染 ---------- */
 function render(){
+  if (!DATA) return;
+  const isBrowse = state.tab==="discover" || state.tab==="theme";
+  const isListTab = state.tab==="fav" || state.tab==="installed" || state.tab==="blocked";
+  document.getElementById("cats-zone").style.display = isBrowse ? "flex" : "none";
+  document.getElementById("toolbar").style.display = state.tab==="advanced" ? "none" : "flex";
+  if (state.tab==="advanced"){ renderAdvanced(); return; }
+  if (isBrowse) renderCats();
+  document.getElementById("adv").style.display = "none";
+
   const list = filtered();
-  document.getElementById("total").textContent = list.length;
   document.getElementById("empty").style.display = list.length ? "none" : "block";
+  document.getElementById("empty").innerHTML = "没有匹配的插件<br><span style='font-size:12px'>换个关键词或清除筛选试试</span>";
   shownCount = Math.min(PAGE, list.length);
   draw(list);
-  document.getElementById("shown").textContent = shownCount;
+  document.getElementById("count-line").textContent = `显示 ${shownCount} / ${list.length} 个插件`;
+  document.getElementById("count-line").style.display = "block";
   document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
+  if (state.tab==="theme"){
+    document.getElementById("note-line").style.display = "block";
+    document.getElementById("note-line").textContent = "主题页展示「界面增强」分类与 theme/appearance 标签的插件，共 " + list.length + " 个";
+  } else document.getElementById("note-line").style.display = "none";
+  renderDock();
+}
+function renderCats(){
+  const el = document.getElementById("cats-zone");
+  let html = `<button class="cat${state.cat==="all"?" active":""}" data-cat="all">全部 <span class="n">${baseList().length}</span></button>`;
+  for (const [k,c] of Object.entries(DATA.categories)){
+    html += `<button class="cat${state.cat===k?" active":""}" data-cat="${k}">${c.zh} <span class="n">${c.count}</span></button>`;
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".cat").forEach(b=>b.onclick=()=>{ state.cat=b.dataset.cat; renderCats(); render(); });
 }
 function badges(p){
   let h = "";
@@ -331,10 +496,17 @@ function badges(p){
   else if (p.source==="git") h += `<span class="badge git">git</span>`;
   if (p.official) h += `<span class="badge off">官方</span>`;
   if (isNew(p)) h += `<span class="badge new">新增</span>`;
+  if (p.version) h += `<span class="badge ver">v${esc(p.version)}</span>`;
+  if (p.source==="npm" && p.downloads) h += `<span class="badge dl">↓ ${fmtN(p.downloads)}</span>`;
   return h;
 }
-function favBtn(p){
-  return `<button class="favorite${favs.has(p.name)?" on":""}" data-fav="${esc(p.name)}" title="收藏">${favs.has(p.name)?"♥":"♡"}</button>`;
+function opsHtml(p){
+  return `<div class="ops">
+    <button class="op${favs.has(p.name)?" on":""}" data-op="fav" data-n="${esc(p.name)}" title="收藏">♥</button>
+    <button class="op${installed.has(p.name)?" on":""}" data-op="installed" data-n="${esc(p.name)}" title="标记已安装">✓</button>
+    <button class="op${queue.has(p.name)?" on":""}" data-op="queue" data-n="${esc(p.name)}" title="加入待安装清单">⤓</button>
+    <button class="op danger${blocked.has(p.name)?" on":""}" data-op="blocked" data-n="${esc(p.name)}" title="屏蔽">🚫</button>
+  </div>`;
 }
 function draw(list){
   const rowsEl = document.getElementById("rows");
@@ -346,31 +518,32 @@ function draw(list){
       ? `<button class="install-btn" data-inst="${i}" title="复制安装命令">安装</button>`
       : `<button class="install-btn pending" disabled title="Git 凭据待补齐">待补</button>`;
     const desc = p.desc || p.descEn || "无描述";
+    const verLine = p.verified ? `<span class="vf">${esc(p.verified)}</span>` : "";
     rh += `<div class="row" data-i="${i}">
       <div class="row-main">
         <div class="row-top"><span class="pname">${esc(p.name)}</span>${badges(p)}<span class="cat-tag">${esc(catName(p.cat))}</span></div>
         <div class="pdesc">${esc(desc)}</div>
         <div class="row-tags">${(p.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
-        <div class="row-meta"><span class="stars">${p.stars||0}</span><span class="upd">${esc((p.updated||"-").slice(0,10))}</span><span>${p.source==="npm"?"npm 安装":"GitHub 仓库"}</span></div>
+        <div class="row-meta"><span class="stars">${p.stars||0}</span><span class="upd">${esc((p.updated||"-").slice(0,10))}</span>${verLine}<span>${p.source==="npm"?"npm 安装":"GitHub 仓库"}</span></div>
       </div>
-      <div class="row-side">${instBtn}${favBtn(p)}</div>
+      <div class="row-side">${instBtn}${opsHtml(p)}</div>
     </div>`;
     gh += `<div class="card" data-i="${i}">
-      <div class="ctop"><span class="pname">${esc(p.name)}</span>${badges(p)}${favBtn(p)}</div>
+      <div class="ctop"><span class="pname">${esc(p.name)}</span>${badges(p)}</div>
       <div class="pdesc">${esc(desc)}</div>
-      <div class="row-tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
-      <div class="cmeta"><span class="stars">${p.stars||0}</span><span>${esc(catName(p.cat))}</span><span>${esc((p.updated||"-").slice(0,10))}</span></div>
+      <div class="cmeta"><span class="stars">${p.stars||0}</span><span>${esc(catName(p.cat))}</span><span>${esc((p.updated||"-").slice(0,10))}</span>${p.verified?`<span class="vf">${esc(p.verified)}</span>`:""}</div>
       ${p.installable?`<button class="install-btn" data-inst="${i}">安装</button>`:`<button class="install-btn pending" disabled>待补</button>`}
+      ${opsHtml(p)}
     </div>`;
   }
   rowsEl.innerHTML = rh;
   gridEl.innerHTML = gh;
   rowsEl.querySelectorAll(".row").forEach(el=>el.onclick=e=>{
-    if(e.target.closest(".install-btn")||e.target.closest(".favorite")) return;
+    if (e.target.closest("button")) return;
     openModal(+el.dataset.i);
   });
   gridEl.querySelectorAll(".card").forEach(el=>el.onclick=e=>{
-    if(e.target.closest(".install-btn")||e.target.closest(".favorite")) return;
+    if (e.target.closest("button")) return;
     openModal(+el.dataset.i);
   });
   document.querySelectorAll(".install-btn:not(.pending)").forEach(b=>b.onclick=e=>{
@@ -378,27 +551,33 @@ function draw(list){
     const p = filtered()[+b.dataset.inst];
     if (p && p.install) copyText(p.install, b, "✓ 已复制");
   });
-  document.querySelectorAll(".favorite").forEach(b=>b.onclick=e=>{
+  document.querySelectorAll(".op").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
-    const n = b.dataset.fav;
-    if (favs.has(n)) favs.delete(n); else favs.add(n);
-    localStorage.setItem("dsh-favs", JSON.stringify([...favs]));
-    render();
+    const n = b.dataset.n, op = b.dataset.op;
+    const set = {fav:favs, installed:installed, blocked:blocked, queue:queue}[op];
+    const key = {"fav":"dsh-favs","installed":"dsh-installed","blocked":"dsh-blocked","queue":"dsh-queue"}[op];
+    if (set.has(n)){ set.delete(n); toast(op==="blocked"?"已取消屏蔽":op==="queue"?"已移出待装":"已取消"); }
+    else { set.add(n); toast(op==="fav"?"已收藏 ♥":op==="installed"?"已标记已安装":op==="blocked"?"已屏蔽，可在「已屏蔽」页恢复":"已加入待装清单 ⤓"); }
+    save(key, set);
+    buildTabbar();
+    if (op==="blocked") render(); else draw(filtered());
+    renderDock();
   });
 }
 function catName(k){ const c = DATA.categories[k]; return c ? c.zh : k; }
-function esc(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function copyText(t, btn, okText){
   navigator.clipboard.writeText(t).then(()=>{
     if (btn){ const old = btn.textContent; btn.textContent = okText||"已复制"; btn.classList.add("copied");
       setTimeout(()=>{btn.textContent=old; btn.classList.remove("copied");},1500); }
-  });
+  }).catch(()=>{ toast("复制失败，请手动复制"); });
 }
 
 /* ---------- 详情 ---------- */
 function openModal(i){
   modalIdx = i;
   const p = filtered()[i];
+  if (!p) return;
   document.getElementById("m-ava").textContent = (p.name||"?").charAt(0).toUpperCase();
   document.getElementById("m-title").textContent = modalLang==="zh" ? (p.title||p.name) : (p.titleEn||p.title||p.name);
   document.getElementById("m-name").textContent = p.name;
@@ -406,8 +585,11 @@ function openModal(i){
   document.getElementById("m-meta").innerHTML = `
     <div class="m-cell"><div class="k">Stars</div><div class="v">★ ${p.stars||0}</div></div>
     <div class="m-cell"><div class="k">来源</div><div class="v">${p.source==="npm"?"npm":"GitHub"}</div></div>
+    <div class="m-cell"><div class="k">版本</div><div class="v">${esc(p.version||"-")}</div></div>
+    <div class="m-cell"><div class="k">下载量(30天)</div><div class="v">${p.downloads?fmtN(p.downloads):"-"}</div></div>
     <div class="m-cell"><div class="k">最近更新</div><div class="v">${esc((p.updated||"-").slice(0,10))}</div></div>
     <div class="m-cell"><div class="k">收录时间</div><div class="v">${esc((p.added||"-").slice(0,10))}</div></div>
+    <div class="m-cell"><div class="k">已验证 DSH</div><div class="v">${esc(p.verified||"-")}</div></div>
     <div class="m-cell"><div class="k">作者</div><div class="v">${esc((p.repo||"").split("/")[0]||"-")}</div></div>
     <div class="m-cell"><div class="k">可安装</div><div class="v">${p.installable?"✓ 是":"✗ 待补"}</div></div>`;
   setDesc(p);
@@ -427,8 +609,7 @@ function openModal(i){
 }
 function setDesc(p){
   const d = document.getElementById("m-desc");
-  const zh = p.desc, en = p.descEn;
-  d.textContent = modalLang==="zh" ? (zh||en||"无描述") : (en||zh||"No description");
+  d.textContent = modalLang==="zh" ? (p.desc||p.descEn||"无描述") : (p.descEn||p.desc||"No description");
   document.getElementById("l-zh").classList.toggle("on", modalLang==="zh");
   document.getElementById("l-en").classList.toggle("on", modalLang==="en");
 }
@@ -437,10 +618,164 @@ document.getElementById("l-en").onclick = ()=>{ modalLang="en"; const p=filtered
 document.getElementById("close").onclick = ()=>document.getElementById("mask").classList.remove("show");
 document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) document.getElementById("mask").classList.remove("show"); };
 
+/* ---------- 待装栏 ---------- */
+function renderDock(){
+  document.getElementById("qcnt").textContent = queue.size;
+  const body = document.getElementById("dock-body");
+  if (queue.size){
+    const qlist = DATA.plugins.filter(p=>queue.has(p.name));
+    body.innerHTML = qlist.map(p=>`<div class="dq"><span class="nm">${esc(p.name)}</span><span class="cmd">${esc(p.install||"待补 commit")}</span><button class="rm" data-q="${esc(p.name)}" title="移除">✕</button></div>`).join("");
+    body.querySelectorAll(".rm").forEach(b=>b.onclick=e=>{
+      e.stopPropagation();
+      queue.delete(b.dataset.q); save("dsh-queue", queue); renderDock(); draw(filtered());
+    });
+  } else body.innerHTML = `<div class="dq" style="color:var(--fg3)">清单为空：在插件上点 ⤓ 加入待装</div>`;
+}
+function toggleDock(){
+  document.getElementById("dock").classList.toggle("open");
+  renderDock();
+}
+function copyAllQueue(e){
+  e.stopPropagation();
+  const qlist = DATA.plugins.filter(p=>queue.has(p.name) && p.install);
+  if (!qlist.length){ toast("待装清单为空"); return; }
+  const all = qlist.map(p=>p.install).join("\n");
+  navigator.clipboard.writeText(all).then(()=>toast("已复制 " + qlist.length + " 条安装命令 ✓")).catch(()=>toast("复制失败"));
+}
+
+/* ---------- 高级页 ---------- */
+function renderAdvanced(){
+  document.getElementById("rows").style.display = "none";
+  document.getElementById("grid").style.display = "none";
+  document.getElementById("more").style.display = "none";
+  document.getElementById("count-line").style.display = "none";
+  document.getElementById("note-line").style.display = "none";
+  document.getElementById("empty").style.display = "none";
+  document.getElementById("adv").style.display = "grid";
+  const idxUrl = document.getElementById("idx-url").textContent;
+  document.getElementById("adv").innerHTML = `
+    <div class="acard">
+      <h4>📌 索引源状态</h4>
+      <div class="kv"><span>地址</span><b style="font-size:11px;font-family:var(--mono)">${esc(idxUrl)}</b></div>
+      <div class="kv"><span>检查结果</span><b id="diag-idx">未检查</b></div>
+      <div class="kv"><span>数据文件</span><b id="diag-data">${esc(DATA.updated||"-")} · ${DATA.total} 条</b></div>
+      <div class="act"><button class="btn" id="btn-diag">🩺 运行诊断</button></div>
+      <div class="desc">诊断会检查索引源与数据文件的连通性和完整性。</div>
+    </div>
+    <div class="acard">
+      <h4>💾 备份与恢复</h4>
+      <div class="kv"><span>收藏</span><b>${favs.size}</b></div>
+      <div class="kv"><span>已安装标记</span><b>${installed.size}</b></div>
+      <div class="kv"><span>屏蔽</span><b>${blocked.size}</b></div>
+      <div class="kv"><span>待装清单</span><b>${queue.size}</b></div>
+      <div class="act">
+        <button class="btn" id="btn-export">⬇ 导出备份 JSON</button>
+        <button class="btn" id="btn-import">⬆ 导入备份</button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
+      </div>
+      <div class="desc">导出收藏/已装/屏蔽/待装配置，换浏览器或重装后可导入恢复。</div>
+    </div>
+    <div class="acard">
+      <h4>ℹ 关于</h4>
+      <div class="kv"><span>索引格式</span><b>format-1</b></div>
+      <div class="kv"><span>数据来源</span><b>dsh.works 种子 + topic 扫描</b></div>
+      <div class="kv"><span>判定标准</span><b>package.json 的 dsh 字段</b></div>
+      <div class="kv"><span>构建时间</span><b>${esc(DATA.updated||"-")}</b></div>
+      <div class="desc">本店是静态站，无法读取你本地 DSH 的安装状态。真实安装/更新/下载进度请使用 DSH 内的 dsh-market 插件；本站的「已安装」为手动标记，用于整理你的安装清单。</div>
+    </div>
+    <div class="acard">
+      <h4>🧹 数据维护</h4>
+      <div class="kv"><span>已屏蔽插件</span><b>${blocked.size}</b></div>
+      <div class="act"><button class="btn" id="btn-clear-blocked">清空屏蔽</button><button class="btn" id="btn-reset">重置全部本地数据</button></div>
+      <div class="desc">清空屏蔽会恢复所有被隐藏的插件；重置会清空收藏/已装/屏蔽/待装。</div>
+    </div>`;
+  document.getElementById("btn-diag").onclick = runDiag;
+  document.getElementById("btn-export").onclick = exportBackup;
+  document.getElementById("btn-import").onclick = ()=>document.getElementById("import-file").click();
+  document.getElementById("import-file").onchange = importBackup;
+  document.getElementById("btn-clear-blocked").onclick = ()=>{
+    if (confirm("确认清空全部屏蔽？")){ blocked.clear(); save("dsh-blocked", blocked); buildTabbar(); renderAdvanced(); toast("已清空屏蔽"); }
+  };
+  document.getElementById("btn-reset").onclick = ()=>{
+    if (confirm("确认重置全部本地数据（收藏/已装/屏蔽/待装）？此操作不可恢复。")){
+      ["dsh-favs","dsh-installed","dsh-blocked","dsh-queue"].forEach(k=>localStorage.removeItem(k));
+      favs.clear(); installed.clear(); blocked.clear(); queue.clear();
+      buildTabbar(); renderAdvanced(); toast("已重置");
+    }
+  };
+}
+async function runDiag(){
+  const el = document.getElementById("diag-idx");
+  el.textContent = "检查中…";
+  const idxUrl = document.getElementById("idx-url").textContent;
+  try {
+    const r = await fetch(idxUrl, {method:"HEAD"});
+    const size = r.headers.get("Content-Length");
+    el.innerHTML = `<span style="color:var(--ok)">✓ HTTP ${r.status}</span>${size?` · ${(size/1048576).toFixed(1)}MB`:""}`;
+  } catch(e){
+    el.innerHTML = `<span style="color:var(--danger)">✗ ${esc(e.message)}</span>`;
+  }
+}
+function exportBackup(){
+  const data = { app:"dsh-store", version:1, exported:new Date().toISOString(),
+    favs:[...favs], installed:[...installed], blocked:[...blocked], queue:[...queue] };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "dsh-store-backup-" + new Date().toISOString().slice(0,10) + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("备份已导出 ✓");
+}
+function importBackup(e){
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try {
+      const d = JSON.parse(rd.result);
+      if (!d || d.app!=="dsh-store") throw new Error("不是本店备份文件");
+      favs = new Set(d.favs||[]); installed = new Set(d.installed||[]);
+      blocked = new Set(d.blocked||[]); queue = new Set(d.queue||[]);
+      save("dsh-favs", favs); save("dsh-installed", installed);
+      save("dsh-blocked", blocked); save("dsh-queue", queue);
+      buildTabbar(); render(); toast("备份已导入 ✓");
+    } catch(err){ toast("导入失败：" + err.message); }
+    e.target.value = "";
+  };
+  rd.readAsText(f);
+}
+
 /* ---------- 控件 ---------- */
 document.getElementById("q").oninput = e=>{ state.q=e.target.value; render(); };
-document.getElementById("sort").onchange = e=>{ state.sort=e.target.value; render(); };
-document.querySelectorAll(".fchip").forEach(b=>b.onclick=()=>{
+document.getElementById("btn-filter").onclick = ()=>{ buildPanel(); openPanel(); };
+document.getElementById("panel-mask").onclick = closePanel;
+function openPanel(){ document.getElementById("panel-mask").classList.add("show"); document.getElementById("panel").classList.add("show"); }
+function closePanel(){ document.getElementById("panel-mask").classList.remove("show"); document.getElementById("panel").classList.remove("show"); }
+function buildPanel(){
+  const g = (id, items, key) => {
+    const el = document.getElementById(id);
+    el.innerHTML = items.map(([v,l])=>`<button class="popt${state[key]===v?" on":""}" data-v="${v}">${l}</button>`).join("");
+    el.querySelectorAll(".popt").forEach(b=>b.onclick=()=>{ state[key]=b.dataset.v; buildPanel(); render(); });
+  };
+  g("pg-sort", SORTS, "sort");
+  g("pg-dir", [["desc","降序"],["asc","升序"]], "dir");
+  g("pg-since", SINCES, "since");
+  g("pg-src", SRCS, "src");
+  const condEl = document.getElementById("pg-cond");
+  condEl.innerHTML = CONDS.map(([v,l])=>`<button class="popt${state.filters.has(v)?" on":""}" data-v="${v}">${l}</button>`).join("");
+  condEl.querySelectorAll(".popt").forEach(b=>b.onclick=()=>{
+    const v = b.dataset.v;
+    if (state.filters.has(v)) state.filters.delete(v); else state.filters.add(v);
+    syncQuickChips(); buildPanel(); render();
+  });
+}
+function syncQuickChips(){
+  document.querySelectorAll("#quick-filters .fchip").forEach(b=>{
+    b.classList.toggle("on", state.filters.has(b.dataset.f));
+  });
+}
+document.querySelectorAll("#quick-filters .fchip").forEach(b=>b.onclick=()=>{
   const f = b.dataset.f;
   if (state.filters.has(f)) state.filters.delete(f); else state.filters.add(f);
   b.classList.toggle("on", state.filters.has(f));
@@ -450,13 +785,13 @@ document.getElementById("more").onclick = ()=>{
   const list = filtered();
   shownCount = Math.min(shownCount + PAGE, list.length);
   draw(list);
-  document.getElementById("shown").textContent = shownCount;
+  document.getElementById("count-line").textContent = `显示 ${shownCount} / ${list.length} 个插件`;
   document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
 };
 document.getElementById("v-row").onclick = ()=>setView("row");
 document.getElementById("v-card").onclick = ()=>setView("card");
 function setView(v){
-  view = v;
+  state.view = v;
   document.getElementById("v-row").classList.toggle("on", v==="row");
   document.getElementById("v-card").classList.toggle("on", v==="card");
   document.getElementById("rows").style.display = v==="row" ? "flex" : "none";
@@ -465,6 +800,7 @@ function setView(v){
 document.getElementById("cp-idx").onclick = e=>{
   copyText(document.getElementById("idx-url").textContent, e.target, "✓ 已复制");
 };
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ closePanel(); document.getElementById("mask").classList.remove("show"); } });
 load();
 </script>
 </body>

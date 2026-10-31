@@ -64,7 +64,7 @@ def fetch_rows(conn, statuses, categories):
     q = """
         SELECT name, repo, path, title_en, title_zh, desc_en, desc_zh, tags, stars,
                install_source, npm, git_commit, npm_version, category_key, pushed_at,
-               official, evidence, status, added
+               official, evidence, status, added, verified_against
         FROM plugins
         WHERE status IN ({})
           AND category IN ({})
@@ -72,6 +72,17 @@ def fetch_rows(conn, statuses, categories):
     """.format(",".join("?" * len(statuses)), ",".join("?" * len(categories)))
     conn.row_factory = sqlite3.Row
     return conn.execute(q, list(statuses) + list(categories)).fetchall()
+
+
+def load_downloads(conn):
+    """npm 包近 30 天下载量映射（incremental.py 每日补齐）。"""
+    m = {}
+    try:
+        for r in conn.execute("SELECT pkg, downloads FROM npm_downloads"):
+            m[r[0]] = r[1]
+    except sqlite3.OperationalError:
+        pass
+    return m
 
 
 def main():
@@ -108,6 +119,7 @@ def main():
     cat_stats = {}
     skipped_git_nocommit = 0
     dup = 0
+    downloads_map = load_downloads(conn)
 
     rows = fetch_rows(conn, config.INDEX_STATUSES, config.INDEX_CATEGORIES)
     for r in rows:
@@ -201,6 +213,9 @@ def main():
             "updated": pushed_at or "",
             "added": added,
             "official": bool(official),
+            "version": npm_version or "",
+            "verified": r["verified_against"] or "",
+            "downloads": downloads_map.get(npm, 0) if install_source == "npm" else 0,
         })
         cat_stats[cat_key] = cat_stats.get(cat_key, 0) + 1
 

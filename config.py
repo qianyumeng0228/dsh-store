@@ -34,6 +34,9 @@ GIT_COMMIT_BATCH_NO_TOKEN = 40
 # 有 token 时单轮上限
 GIT_COMMIT_BATCH_TOKEN = 2000
 
+# npm 下载量（近30天）单轮补齐上限（npm API 无严格限速，4 线程+重试）
+NPM_DL_BATCH = 5000
+
 # ---------- 分类（tags -> categories，中英双语） ----------
 # 参考 awesome-dsh-plugin.com 的 16 分类体系 + dsh.works 的 tags
 CATEGORY_DEFS = {

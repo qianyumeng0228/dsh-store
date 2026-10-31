@@ -18,6 +18,7 @@ import sqlite3
 import sys
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
 
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+NPM_DL_API = "https://api.npmjs.org/downloads/point/last-month"
 
 
 def api_get(url, timeout=20):
@@ -164,10 +166,75 @@ def scan_new(conn, pages=3):
     return added
 
 
+def npm_downloads(pkg: str):
+    """npm 包近 30 天下载量；404 快速失败，其余异常重试 2 次，仍失败返回 None。"""
+    last_exc = None
+    for attempt in range(3):
+        try:
+            req = Request(f"{NPM_DL_API}/{urllib.parse.quote(pkg, safe='')}",
+                          headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
+            with urlopen(req, timeout=20) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            n = data.get("downloads")
+            return int(n) if n is not None else None
+        except HTTPError as e:
+            if e.code == 404:
+                return None  # 包不存在，无需重试
+            last_exc = e
+            if attempt < 2:
+                time.sleep(1 + attempt)
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(1 + attempt)
+    return None
+
+
+def fill_downloads(conn, limit):
+    """给 npm 插件补近 30 天下载量（npm_downloads 表，按 stars 降序，多线程）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS npm_downloads (
+            pkg TEXT PRIMARY KEY, downloads INTEGER, updated TEXT
+        )
+    """)
+    conn.commit()
+    rows = conn.execute("""
+        SELECT p.name, p.npm, p.stars FROM plugins p
+        WHERE p.install_source='npm' AND p.npm IS NOT NULL AND p.npm!=''
+          AND NOT EXISTS (SELECT 1 FROM npm_downloads d WHERE d.pkg=p.npm)
+        ORDER BY p.stars DESC LIMIT ?
+    """, (limit,)).fetchall()
+    print(f"[downloads] 待补 {len(rows)} 个（近30天下载量）")
+    if not rows:
+        return 0
+    ok = fail = 0
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futs = {ex.submit(npm_downloads, npm): (name, npm) for name, npm, _ in rows}
+        done = 0
+        for fut in as_completed(futs):
+            name, npm = futs[fut]
+            n = fut.result()
+            done += 1
+            if n is not None:
+                conn.execute(
+                    "INSERT OR REPLACE INTO npm_downloads(pkg, downloads, updated) VALUES (?,?,?)",
+                    (npm, n, time.strftime("%Y-%m-%d")))
+                ok += 1
+            else:
+                fail += 1
+            if done % 200 == 0:
+                conn.commit()
+                print(f"[downloads] 进度 {done}/{len(rows)}")
+    conn.commit()
+    print(f"[downloads] 完成: 成功 {ok} / 失败 {fail}")
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit-only", action="store_true")
     ap.add_argument("--scan-new", action="store_true")
+    ap.add_argument("--downloads", action="store_true")
     ap.add_argument("--all", action="store_true")
     args = ap.parse_args()
 
@@ -181,6 +248,8 @@ def main():
     if args.commit_only or args.all:
         limit = config.GIT_COMMIT_BATCH_TOKEN if config.GITHUB_TOKEN else config.GIT_COMMIT_BATCH_NO_TOKEN
         fill_commits(conn, limit)
+    if args.downloads or args.all:
+        fill_downloads(conn, config.NPM_DL_BATCH)
     if args.scan_new or args.all:
         scan_new(conn)
     conn.close()
