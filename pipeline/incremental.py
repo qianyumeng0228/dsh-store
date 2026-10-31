@@ -34,7 +34,12 @@ def api_get(url, timeout=20):
     try:
         with urlopen(req, timeout=timeout) as r:
             remaining = r.headers.get("X-RateLimit-Remaining")
-            return json.loads(r.read().decode("utf-8")), remaining
+            raw = r.read().decode("utf-8-sig")  # utf-8-sig 兼容带 BOM 的 package.json
+            try:
+                return json.loads(raw), remaining
+            except json.JSONDecodeError:
+                print(f"[api] 非 JSON 响应: {url[:80]} ({len(raw)} bytes)")
+                return None, remaining
     except HTTPError as e:
         if e.code == 403:
             # 限速或 token 失效
@@ -72,7 +77,6 @@ def probe_repo(repo: str):
         data, _ = api_get(f"https://raw.githubusercontent.com/{repo}/HEAD/{p}")
         if not isinstance(data, dict):
             continue
-        # 三硬指标：dsh 字段 / dsh.bundle.patch
         if "dsh" in data or "dsh.bundle" in data:
             ev = f"{p}#dsh"
             npm = data.get("name") if isinstance(data.get("name"), str) else None
