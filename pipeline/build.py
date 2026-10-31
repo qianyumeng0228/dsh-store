@@ -64,7 +64,7 @@ def fetch_rows(conn, statuses, categories):
     q = """
         SELECT name, repo, path, title_en, title_zh, desc_en, desc_zh, tags, stars,
                install_source, npm, git_commit, npm_version, category_key, pushed_at,
-               official, evidence, status
+               official, evidence, status, added
         FROM plugins
         WHERE status IN ({})
           AND category IN ({})
@@ -189,6 +189,7 @@ def main():
 
         # ---- 网站数据 ----
         install_cmd = f"dsh plugin add {pname}" if install_source == "npm" else f"dsh plugin add github:{repo}"
+        added = r["added"] if "added" in r.keys() else ""
         site_plugins.append({
             "name": pname, "title": title_zh or title_en or pname,
             "titleEn": title_en or pname, "desc": desc_zh or desc_en or "",
@@ -198,6 +199,7 @@ def main():
             "installable": installable,
             "source": install_source,
             "updated": pushed_at or "",
+            "added": added,
             "official": bool(official),
         })
         cat_stats[cat_key] = cat_stats.get(cat_key, 0) + 1

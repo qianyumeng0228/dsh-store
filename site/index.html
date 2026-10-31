@@ -6,199 +6,301 @@
 <title>DSH 插件商店</title>
 <style>
   :root{
-    --bg:#0b1017; --bg2:#111827; --bg3:#1a2332;
-    --line:#24344a; --line2:#2e4057;
-    --fg:#e6edf3; --fg2:#9fb0c3; --fg3:#6b7c90;
-    --accent:#00c8c8; --accent2:#39c5bb; --accent-dim:rgba(0,200,200,.12);
-    --warn:#e5b567; --ok:#7ec699;
-    --radius:12px;
+    --bg:#f5f7fa; --bg2:#ffffff; --bg3:#eef2f7;
+    --line:#e4e9f0; --line2:#d3dbe6;
+    --fg:#1c2433; --fg2:#5a6b82; --fg3:#8b99ad;
+    --accent:#00a8b8; --accent-deep:#008a9a; --accent-bg:#e6f7f9;
+    --ok:#12a150; --ok-bg:#e8f7ee; --warn:#d97706; --warn-bg:#fdf3e3;
+    --star:#f5a623; --link:#2563eb;
+    --radius:12px; --radius-sm:8px;
+    --shadow:0 1px 2px rgba(20,40,80,.04),0 2px 8px rgba(20,40,80,.05);
+    --shadow-lg:0 8px 40px rgba(20,40,80,.16);
     --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
     --mono:ui-monospace,SFMono-Regular,Consolas,"Cascadia Code",monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55}
-  a{color:var(--accent);text-decoration:none}
+  html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14.5px;line-height:1.55}
+  a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
+  button{font-family:inherit}
 
-  header{padding:22px 28px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0f1a26,var(--bg));position:sticky;top:0;z-index:20;backdrop-filter:blur(8px)}
-  .head-inner{max-width:1280px;margin:0 auto;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  h1{font-size:22px;font-weight:700;letter-spacing:.5px}
-  h1 .dot{color:var(--accent)}
-  .stats{font-size:13px;color:var(--fg2);display:flex;gap:16px;flex-wrap:wrap}
-  .stats b{color:var(--accent2);font-weight:600}
-  .tagline{margin-left:auto;font-size:12px;color:var(--fg3)}
-  .tagline code{background:var(--bg3);border:1px solid var(--line);padding:2px 7px;border-radius:6px;font-family:var(--mono);font-size:11px;color:var(--fg2)}
+  /* ---------- 顶栏 ---------- */
+  header{background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+  .head{max-width:1320px;margin:0 auto;padding:12px 26px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#3ec6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;box-shadow:0 2px 6px rgba(0,168,184,.35)}
+  .brand b{font-size:17px;letter-spacing:.3px}
+  .brand small{display:block;font-size:11px;color:var(--fg3);font-weight:400;letter-spacing:.5px}
+  .search{flex:1;min-width:220px;max-width:560px;position:relative}
+  .search input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:9px 14px 9px 38px;font-size:14px;outline:none;color:var(--fg);transition:all .15s}
+  .search input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(0,168,184,.12)}
+  .search .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--fg3);font-size:15px}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:5px 13px;font-size:12px;color:var(--fg2);display:flex;flex-direction:column;align-items:center;line-height:1.3}
+  .stat b{font-size:15px;color:var(--fg);font-variant-numeric:tabular-nums}
+  .stat b.ok{color:var(--ok)}
 
-  .layout{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:230px 1fr;gap:22px;padding:20px 28px 60px}
-  aside{position:sticky;top:86px;align-self:start}
-  aside h2{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--fg3);margin-bottom:10px}
-  .cat{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:8px;cursor:pointer;color:var(--fg2);font-size:13.5px;border:1px solid transparent;margin-bottom:2px;transition:all .12s}
-  .cat:hover{background:var(--bg3);color:var(--fg)}
-  .cat.active{background:var(--accent-dim);color:var(--accent2);border-color:rgba(0,200,200,.35);font-weight:600}
-  .cat .n{font-size:11px;color:var(--fg3);background:var(--bg3);border-radius:99px;padding:1px 8px}
-  .cat.active .n{color:var(--accent2);background:rgba(0,200,200,.15)}
+  /* ---------- 索引源提示条 ---------- */
+  .idxbar{background:var(--accent-bg);border-bottom:1px solid rgba(0,168,184,.18)}
+  .idxbar .in{max-width:1320px;margin:0 auto;padding:7px 26px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--accent-deep);flex-wrap:wrap}
+  .idxbar code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid rgba(0,168,184,.25);border-radius:6px;padding:2px 8px;color:var(--fg)}
+  .idxbar .cp{margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:3px 12px;font-size:12px;cursor:pointer}
+  .idxbar .cp:hover{background:var(--accent-deep)}
 
-  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-  .search{flex:1;min-width:220px;position:relative}
-  .search input{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--fg);padding:9px 14px 9px 36px;border-radius:9px;font-size:14px;outline:none;font-family:inherit}
-  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-  .search .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--fg3);font-size:14px;pointer-events:none}
-  select,.btn{background:var(--bg2);border:1px solid var(--line);color:var(--fg2);padding:9px 12px;border-radius:9px;font-size:13px;cursor:pointer;font-family:inherit}
+  /* ---------- 主体 ---------- */
+  .wrap{max-width:1320px;margin:0 auto;padding:18px 26px 70px}
+
+  /* 分类横排 */
+  .cats{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .cat{background:var(--bg2);border:1px solid var(--line);border-radius:99px;padding:5px 13px;font-size:12.5px;color:var(--fg2);cursor:pointer;transition:all .13s;white-space:nowrap;display:flex;align-items:center;gap:5px}
+  .cat:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .cat.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .cat .n{font-size:10.5px;opacity:.75}
+  .cat.active .n{opacity:.9}
+
+  /* 工具栏 */
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .toolbar .spacer{flex:1}
+  select,.btn{background:var(--bg2);border:1px solid var(--line2);color:var(--fg2);padding:6.5px 11px;border-radius:8px;font-size:12.5px;cursor:pointer;font-family:inherit}
   select:focus{outline:none;border-color:var(--accent)}
-  .btn:hover{border-color:var(--line2);color:var(--fg)}
-  .check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--fg2);cursor:pointer;user-select:none;white-space:nowrap}
-  .check input{accent-color:var(--accent);width:15px;height:15px}
-
-  .count-line{font-size:12.5px;color:var(--fg3);margin-bottom:12px}
+  .btn:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep);font-weight:600}
+  .fgroup{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .fchip{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer;transition:all .13s;user-select:none}
+  .fchip:hover{border-color:var(--accent)}
+  .fchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep);font-weight:600}
+  .count-line{font-size:12.5px;color:var(--fg3);margin:0 4px 10px}
   .count-line b{color:var(--fg2)}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-  .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 13px;cursor:pointer;transition:border-color .15s,transform .15s,background .15s;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
-  .card:hover{border-color:var(--accent);transform:translateY(-2px);background:var(--bg3)}
-  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
-  .card:hover::before{background:var(--accent)}
-  .card-top{display:flex;align-items:center;gap:8px;min-width:0}
-  .card-top .name{font-family:var(--mono);font-size:13px;color:var(--fg);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .card-top .src{font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid;flex-shrink:0}
-  .src.npm{color:var(--ok);border-color:rgba(126,198,153,.4);background:rgba(126,198,153,.08)}
-  .src.git{color:var(--warn);border-color:rgba(229,181,103,.4);background:rgba(229,181,103,.08)}
-  .src.no{color:var(--fg3);border-color:var(--line);background:var(--bg3)}
-  .card .desc{font-size:13px;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:40px}
-  .card .desc.en{color:var(--fg3)}
-  .card-bottom{display:flex;align-items:center;gap:10px;margin-top:auto}
-  .card .stars{font-size:12px;color:var(--fg3);display:flex;align-items:center;gap:4px}
-  .card .stars::before{content:"★";color:var(--warn)}
-  .card .cat-tag{font-size:11px;color:var(--accent2);background:var(--accent-dim);padding:2px 8px;border-radius:6px;white-space:nowrap}
-  .card .tags{display:flex;gap:5px;flex-wrap:wrap;flex:1;overflow:hidden}
-  .card .tag{font-size:10.5px;color:var(--fg3);background:var(--bg3);border:1px solid var(--line);padding:1px 7px;border-radius:6px;white-space:nowrap}
+  /* ---------- 列表视图（默认） ---------- */
+  .rows{display:flex;flex-direction:column;gap:8px}
+  .row{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:13px 16px;display:grid;grid-template-columns:1fr auto;gap:8px 18px;cursor:pointer;transition:all .14s;box-shadow:var(--shadow)}
+  .row:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(0,168,184,.13);transform:translateY(-1px)}
+  .row-main{min-width:0}
+  .row-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+  .pname{font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--fg)}
+  .badge{font-size:10.5px;padding:1px 7px;border-radius:99px;border:1px solid;flex-shrink:0;font-weight:600}
+  .badge.npm{color:var(--ok);border-color:rgba(18,161,80,.35);background:var(--ok-bg)}
+  .badge.git{color:var(--warn);border-color:rgba(217,119,6,.35);background:var(--warn-bg)}
+  .badge.off{color:var(--accent-deep);border-color:rgba(0,168,184,.35);background:var(--accent-bg)}
+  .badge.new{color:#7c3aed;border-color:rgba(124,58,237,.35);background:#f5f0ff}
+  .pdesc{font-size:13px;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .row-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .tag{font-size:11px;color:var(--fg2);background:var(--bg3);border:1px solid var(--line);padding:1px 8px;border-radius:6px}
+  .cat-tag{font-size:11px;color:var(--accent-deep);background:var(--accent-bg);padding:1px 9px;border-radius:6px;font-weight:500}
+  .row-meta{display:flex;align-items:center;gap:14px;margin-top:7px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
+  .row-meta .stars{color:var(--star);font-weight:600;display:flex;align-items:center;gap:3px}
+  .row-meta .stars::before{content:"★"}
+  .row-meta .upd::before{content:"⟳ ";opacity:.7}
+  .row-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:8px}
+  .install-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12.5px;cursor:pointer;font-weight:600;transition:all .13s;white-space:nowrap}
+  .install-btn:hover{background:var(--accent-deep)}
+  .install-btn:disabled,.install-btn.pending{background:var(--bg3);color:var(--fg3);cursor:not-allowed}
+  .favorite{background:none;border:none;font-size:17px;cursor:pointer;color:var(--line2);line-height:1;transition:all .13s;padding:2px}
+  .favorite.on{color:#ef4444}
+  .favorite:hover{transform:scale(1.15)}
 
-  .more-wrap{text-align:center;margin-top:26px}
-  #more{padding:10px 34px;border-radius:9px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent2);font-size:14px;cursor:pointer;font-family:inherit}
-  #more:hover{background:rgba(0,200,200,.2)}
+  /* ---------- 卡片视图 ---------- */
+  .grid{display:none;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:15px;cursor:pointer;transition:all .14s;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)}
+  .card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,168,184,.14)}
+  .card .ctop{display:flex;align-items:center;gap:8px;min-width:0}
+  .card .pname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .favorite{margin-left:auto}
+  .card .pdesc{flex:1}
+  .card .cmeta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--fg3)}
+  .card .stars{color:var(--star);font-weight:600}
+  .card .stars::before{content:"★"}
+  .card .install-btn{width:100%;text-align:center;margin-top:4px}
+
+  /* 视图切换 */
+  .view-switch{display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+  .view-switch button{background:var(--bg2);border:none;padding:6px 11px;font-size:12.5px;color:var(--fg2);cursor:pointer}
+  .view-switch button.on{background:var(--accent);color:#fff}
+
+  .more-wrap{text-align:center;margin-top:22px}
+  #more{padding:9px 36px;border-radius:9px;border:1px solid var(--accent);background:#fff;color:var(--accent-deep);font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:600}
+  #more:hover{background:var(--accent-bg)}
   .empty{text-align:center;color:var(--fg3);padding:60px 0;font-size:14px}
 
-  .modal-mask{position:fixed;inset:0;background:rgba(5,10,16,.72);backdrop-filter:blur(4px);display:none;z-index:100;align-items:center;justify-content:center;padding:20px}
-  .modal-mask.show{display:flex}
-  .modal{background:var(--bg2);border:1px solid var(--line2);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 28px;position:relative}
-  .modal .close{position:absolute;right:16px;top:14px;background:none;border:none;color:var(--fg3);font-size:22px;cursor:pointer;line-height:1}
+  /* ---------- 详情弹层 ---------- */
+  .mask{position:fixed;inset:0;background:rgba(23,35,55,.42);backdrop-filter:blur(3px);display:none;z-index:100;align-items:center;justify-content:center;padding:20px}
+  .mask.show{display:flex}
+  .modal{background:#fff;border-radius:16px;max-width:660px;width:100%;max-height:86vh;overflow:auto;padding:26px 28px;box-shadow:var(--shadow-lg);position:relative}
+  .modal .close{position:absolute;right:14px;top:12px;background:none;border:none;color:var(--fg3);font-size:24px;cursor:pointer;line-height:1}
   .modal .close:hover{color:var(--fg)}
-  .modal h2{font-size:19px;margin-bottom:4px;word-break:break-all}
-  .modal .pname{font-family:var(--mono);font-size:13px;color:var(--accent2);margin-bottom:14px}
-  .modal .pdesc{font-size:14px;color:var(--fg);margin-bottom:16px;white-space:pre-wrap}
-  .modal .pdesc.en{color:var(--fg2)}
-  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:13px;color:var(--fg2);margin-bottom:16px}
-  .meta .k{color:var(--fg3);margin-right:6px}
-  .install-box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:13px 15px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .install-box code{font-family:var(--mono);font-size:13px;color:var(--accent2);flex:1;word-break:break-all}
-  .install-box button{background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent2);border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:inherit;flex-shrink:0}
-  .install-box button:hover{background:rgba(0,200,200,.22)}
-  .install-box button.copied{color:var(--ok);border-color:var(--ok);background:rgba(126,198,153,.12)}
-  .no-install{background:var(--bg);border:1px dashed var(--line2);border-radius:10px;padding:12px 15px;font-size:12.5px;color:var(--fg3);margin-bottom:8px}
-  .modal .links{display:flex;gap:14px;font-size:13px;margin-top:6px}
-  .tags-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-  .tags-row .tag{font-size:11.5px;color:var(--fg2);background:var(--bg3);border:1px solid var(--line);padding:2px 10px;border-radius:99px}
+  .m-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+  .m-ava{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#3ec6d4);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0}
+  .m-title{font-size:19px;font-weight:700;line-height:1.3}
+  .m-pname{font-family:var(--mono);font-size:12.5px;color:var(--accent-deep);margin-top:2px;word-break:break-all}
+  .m-badges{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .lang-switch{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden;margin-bottom:12px;width:fit-content}
+  .lang-switch button{background:#fff;border:none;padding:4px 14px;font-size:12px;color:var(--fg2);cursor:pointer}
+  .lang-switch button.on{background:var(--accent);color:#fff}
+  .m-desc{font-size:13.5px;color:var(--fg);white-space:pre-wrap;margin-bottom:14px;line-height:1.65}
+  .m-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .m-cell{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+  .m-cell .k{font-size:11px;color:var(--fg3)}
+  .m-cell .v{font-size:13px;color:var(--fg);margin-top:1px;font-weight:500}
+  .install-box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .install-box code{font-family:var(--mono);font-size:12.5px;color:var(--accent-deep);flex:1;word-break:break-all}
+  .install-box button{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:6px 15px;font-size:12.5px;cursor:pointer;font-weight:600;flex-shrink:0}
+  .install-box button:hover{background:var(--accent-deep)}
+  .install-box button.copied{background:var(--ok)}
+  .no-install{background:var(--bg);border:1px dashed var(--line2);border-radius:10px;padding:11px 14px;font-size:12.5px;color:var(--fg3)}
+  .m-links{display:flex;gap:16px;font-size:13px;margin-top:4px;flex-wrap:wrap}
+  .m-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .m-tags .tag{font-size:11.5px;padding:2px 10px;border-radius:99px}
 
-  footer{max-width:1280px;margin:0 auto;padding:0 28px 40px;color:var(--fg3);font-size:12px;display:flex;gap:22px;flex-wrap:wrap;justify-content:space-between}
-  footer code{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:2px 7px;border-radius:6px;color:var(--fg2)}
-  @media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:static}}
+  footer{max-width:1320px;margin:0 auto;padding:0 26px 34px;color:var(--fg3);font-size:12px;display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between}
+  footer code{font-family:var(--mono);font-size:11px;background:#fff;border:1px solid var(--line);padding:1px 7px;border-radius:5px;color:var(--fg2)}
+
+  @media(max-width:900px){
+    .head{gap:12px}
+    .stats{margin-left:0}
+    .m-meta{grid-template-columns:1fr 1fr}
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="head-inner">
-    <h1>DSH<span class="dot">·</span>插件商店</h1>
-    <div class="stats">
-      <span>共 <b id="st-total">-</b> 个插件</span>
-      <span>可一键装 <b id="st-ok">-</b></span>
-      <span>更新于 <b id="st-upd">-</b></span>
+  <div class="head">
+    <div class="brand"><div class="logo">D</div><div><b>DSH 插件商店</b><small>Plugin Store</small></div></div>
+    <div class="search"><span class="ic">⌕</span>
+      <input id="q" type="text" placeholder="搜索插件名称 / 描述 / 标签…" autocomplete="off">
     </div>
-    <div class="tagline">索引源：<code id="idx-url">index.json</code> · Plugins → Discover → Index sources</div>
+    <div class="stats">
+      <div class="stat">共 <b id="st-total">-</b> 个</div>
+      <div class="stat">可装 <b class="ok" id="st-ok">-</b></div>
+      <div class="stat">官方 <b id="st-off">-</b></div>
+      <div class="stat">新增 <b id="st-new">-</b></div>
+      <div class="stat">更新 <b id="st-upd" style="font-size:11px">-</b></div>
+    </div>
   </div>
+  <div class="idxbar"><div class="in">
+    <span>📌 索引源：<code id="idx-url">index.json</code></span>
+    <span style="color:var(--fg3)">DSH → Plugins → Discover → Index sources 粘贴即可浏览安装</span>
+    <button class="cp" id="cp-idx">复制</button>
+  </div></div>
 </header>
 
-<div class="layout">
-  <aside>
-    <h2>分类</h2>
-    <div id="cats"></div>
-  </aside>
-  <main>
-    <div class="toolbar">
-      <div class="search"><span class="icon">⌕</span>
-        <input id="q" type="text" placeholder="搜索名称 / 描述 / 标签…" autocomplete="off">
-      </div>
-      <select id="sort">
-        <option value="stars">按 Star 排序</option>
-        <option value="updated">按最近更新</option>
-        <option value="name">按名称</option>
-      </select>
-      <label class="check"><input type="checkbox" id="only-inst"> 只看可安装</label>
+<div class="wrap">
+  <div class="cats" id="cats"></div>
+
+  <div class="toolbar">
+    <select id="sort">
+      <option value="stars">按 Star 排序</option>
+      <option value="updated">按最近更新</option>
+      <option value="name">按名称</option>
+      <option value="new">按收录时间</option>
+    </select>
+    <div class="fgroup">
+      <button class="fchip" data-f="inst">只看可安装</button>
+      <button class="fchip" data-f="off">只看官方</button>
+      <button class="fchip" data-f="new">7 天内新增</button>
+      <button class="fchip" data-f="fav">我的收藏</button>
     </div>
-    <div class="count-line">显示 <b id="shown">0</b> / <b id="total">0</b></div>
-    <div class="grid" id="grid"></div>
-    <div class="more-wrap"><button id="more">加载更多</button></div>
-    <div class="empty" id="empty" style="display:none">没有匹配的插件</div>
-  </main>
+    <div class="spacer"></div>
+    <div class="view-switch">
+      <button id="v-row" class="on" title="列表视图">≡ 列表</button>
+      <button id="v-card" title="卡片视图">▦ 卡片</button>
+    </div>
+  </div>
+
+  <div class="count-line">显示 <b id="shown">0</b> / <b id="total">0</b> 个插件</div>
+
+  <div class="rows" id="rows"></div>
+  <div class="grid" id="grid"></div>
+
+  <div class="more-wrap"><button id="more">加载更多</button></div>
+  <div class="empty" id="empty" style="display:none">没有匹配的插件<br><span style="font-size:12px">换个关键词或清除筛选试试</span></div>
 </div>
 
 <footer>
-  <div>数据源：dsh.works（21,928 条种子）+ GitHub topic:dsh-plugin 增量扫描 · 判真伪依据 <code>package.json</code> 的 <code>dsh</code> 字段</div>
-  <div>安装命令：<code>dsh plugin add &lt;name&gt;</code> / <code>dsh plugin add github:&lt;owner/repo&gt;</code></div>
+  <div>数据源：dsh.works 种子 + GitHub topic:dsh-plugin 每日增量扫描 · 判定依据 <code>package.json</code> 的 <code>dsh</code> 字段</div>
+  <div>安装：<code>dsh plugin add &lt;name&gt;</code> · <code>dsh plugin add github:&lt;owner/repo&gt;</code></div>
 </footer>
 
-<div class="modal-mask" id="mask">
-  <div class="modal" id="modal">
+<div class="mask" id="mask">
+  <div class="modal">
     <button class="close" id="close">&times;</button>
-    <h2 id="m-title"></h2>
-    <div class="pname" id="m-name"></div>
-    <div class="pdesc" id="m-desc"></div>
-    <div class="meta" id="m-meta"></div>
+    <div class="m-head">
+      <div class="m-ava" id="m-ava"></div>
+      <div>
+        <div class="m-title" id="m-title"></div>
+        <div class="m-pname" id="m-name"></div>
+        <div class="m-badges" id="m-badges"></div>
+      </div>
+    </div>
+    <div class="lang-switch"><button id="l-zh" class="on">中文</button><button id="l-en">English</button></div>
+    <div class="m-desc" id="m-desc"></div>
+    <div class="m-meta" id="m-meta"></div>
     <div id="m-install"></div>
-    <div class="links" id="m-links"></div>
-    <div class="tags-row" id="m-tags"></div>
+    <div class="m-links" id="m-links"></div>
+    <div class="m-tags" id="m-tags"></div>
   </div>
 </div>
 
 <script>
-const PAGE = 60;
-let DATA = null, shownCount = 0;
-let state = { q:"", cat:"all", sort:"stars", onlyInst:false };
+const PAGE = 40;
+let DATA = null, shownCount = 0, view = "row";
+const state = { q:"", cat:"all", sort:"stars", filters:new Set() };
+let favs = new Set(JSON.parse(localStorage.getItem("dsh-favs")||"[]"));
+let modalIdx = -1, modalLang = "zh";
 
 async function load(){
   const r = await fetch("data/plugins.json");
   DATA = await r.json();
+  const off = DATA.plugins.filter(p=>p.official).length;
+  const seven = DATA.plugins.filter(isNew).length;
   document.getElementById("st-total").textContent = DATA.total;
   document.getElementById("st-ok").textContent = DATA.installable;
-  document.getElementById("st-upd").textContent = DATA.updated;
-  const base = location.pathname.replace(/[^/]*$/, "");
+  document.getElementById("st-off").textContent = off;
+  document.getElementById("st-new").textContent = seven;
+  document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
+  const base = location.pathname.replace(/[^/]*$/,"");
   document.getElementById("idx-url").textContent = location.origin + base + "index.json";
   renderCats(); render();
 }
+function isNew(p){
+  const a = (p.added||"").slice(0,10);
+  if(!a) return false;
+  const t = Date.now() - new Date(a+"T00:00:00").getTime();
+  return t < 7*864e5;
+}
 function renderCats(){
   const el = document.getElementById("cats");
-  let html = `<div class="cat${state.cat==="all"?" active":""}" data-cat="all"><span>全部</span><span class="n">${DATA.total}</span></div>`;
+  let html = `<button class="cat${state.cat==="all"?" active":""}" data-cat="all">全部 <span class="n">${DATA.total}</span></button>`;
   for (const [k,c] of Object.entries(DATA.categories)){
-    html += `<div class="cat${state.cat===k?" active":""}" data-cat="${k}"><span>${c.zh}</span><span class="n">${c.count}</span></div>`;
+    html += `<button class="cat${state.cat===k?" active":""}" data-cat="${k}">${c.zh} <span class="n">${c.count}</span></button>`;
   }
   el.innerHTML = html;
-  el.querySelectorAll(".cat").forEach(el=>el.onclick=()=>{ state.cat=el.dataset.cat; renderCats(); render(); });
+  el.querySelectorAll(".cat").forEach(b=>b.onclick=()=>{ state.cat=b.dataset.cat; renderCats(); render(); });
 }
 function filtered(){
   const q = state.q.trim().toLowerCase();
   let list = DATA.plugins;
   if (state.cat!=="all") list = list.filter(p=>p.cat===state.cat);
-  if (state.onlyInst) list = list.filter(p=>p.installable);
+  for (const f of state.filters){
+    if (f==="inst") list = list.filter(p=>p.installable);
+    if (f==="off") list = list.filter(p=>p.official);
+    if (f==="new") list = list.filter(isNew);
+    if (f==="fav") list = list.filter(p=>favs.has(p.name));
+  }
   if (q){
     list = list.filter(p =>
       (p.name||"").toLowerCase().includes(q) ||
       (p.title||"").toLowerCase().includes(q) ||
       (p.desc||"").toLowerCase().includes(q) ||
+      (p.descEn||"").toLowerCase().includes(q) ||
       (p.tags||[]).some(t=>t.toLowerCase().includes(q)));
   }
   const s = state.sort;
   list.sort((a,b)=>{
     if (s==="stars") return (b.stars||0)-(a.stars||0);
     if (s==="updated") return (b.updated||"").localeCompare(a.updated||"");
+    if (s==="new") return (b.added||"").localeCompare(a.added||"");
     return (a.name||"").localeCompare(b.name||"");
   });
   return list;
@@ -212,75 +314,145 @@ function render(){
   document.getElementById("shown").textContent = shownCount;
   document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
 }
+function badges(p){
+  let h = "";
+  if (p.source==="npm") h += `<span class="badge npm">npm</span>`;
+  else if (p.source==="git") h += `<span class="badge git">git</span>`;
+  if (p.official) h += `<span class="badge off">官方</span>`;
+  if (isNew(p)) h += `<span class="badge new">新增</span>`;
+  return h;
+}
+function favBtn(p){
+  return `<button class="favorite${favs.has(p.name)?" on":""}" data-fav="${esc(p.name)}" title="收藏">${favs.has(p.name)?"♥":"♡"}</button>`;
+}
 function draw(list){
-  const grid = document.getElementById("grid");
-  let html = "";
+  const rowsEl = document.getElementById("rows");
+  const gridEl = document.getElementById("grid");
+  let rh="", gh="";
   for (let i=0;i<shownCount;i++){
     const p = list[i];
-    const srcCls = p.installable ? (p.source==="npm"?"npm":"git") : "no";
-    const srcTxt = p.installable ? (p.source==="npm"?"npm":"git") : "待补";
-    const desc = p.desc || p.descEn;
-    html += `<div class="card" data-i="${i}" onclick="openModal(${i})">
-      <div class="card-top"><span class="name">${esc(p.name)}</span><span class="src ${srcCls}">${srcTxt}</span></div>
-      <div class="desc${p.desc?"":" en"}">${esc(desc||"无描述")}</div>
-      <div class="card-bottom">
-        <span class="stars">${p.stars||0}</span>
-        <span class="cat-tag">${catName(p.cat)}</span>
-        <span class="tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</span>
+    const instBtn = p.installable
+      ? `<button class="install-btn" data-inst="${i}" title="复制安装命令">安装</button>`
+      : `<button class="install-btn pending" disabled title="Git 凭据待补齐">待补</button>`;
+    const desc = p.desc || p.descEn || "无描述";
+    rh += `<div class="row" data-i="${i}">
+      <div class="row-main">
+        <div class="row-top"><span class="pname">${esc(p.name)}</span>${badges(p)}<span class="cat-tag">${esc(catName(p.cat))}</span></div>
+        <div class="pdesc">${esc(desc)}</div>
+        <div class="row-tags">${(p.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+        <div class="row-meta"><span class="stars">${p.stars||0}</span><span class="upd">${esc((p.updated||"-").slice(0,10))}</span><span>${p.source==="npm"?"npm 安装":"GitHub 仓库"}</span></div>
       </div>
+      <div class="row-side">${instBtn}${favBtn(p)}</div>
+    </div>`;
+    gh += `<div class="card" data-i="${i}">
+      <div class="ctop"><span class="pname">${esc(p.name)}</span>${badges(p)}${favBtn(p)}</div>
+      <div class="pdesc">${esc(desc)}</div>
+      <div class="row-tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <div class="cmeta"><span class="stars">${p.stars||0}</span><span>${esc(catName(p.cat))}</span><span>${esc((p.updated||"-").slice(0,10))}</span></div>
+      ${p.installable?`<button class="install-btn" data-inst="${i}">安装</button>`:`<button class="install-btn pending" disabled>待补</button>`}
     </div>`;
   }
-  grid.innerHTML = html;
+  rowsEl.innerHTML = rh;
+  gridEl.innerHTML = gh;
+  rowsEl.querySelectorAll(".row").forEach(el=>el.onclick=e=>{
+    if(e.target.closest(".install-btn")||e.target.closest(".favorite")) return;
+    openModal(+el.dataset.i);
+  });
+  gridEl.querySelectorAll(".card").forEach(el=>el.onclick=e=>{
+    if(e.target.closest(".install-btn")||e.target.closest(".favorite")) return;
+    openModal(+el.dataset.i);
+  });
+  document.querySelectorAll(".install-btn:not(.pending)").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const p = filtered()[+b.dataset.inst];
+    if (p && p.install) copyText(p.install, b, "✓ 已复制");
+  });
+  document.querySelectorAll(".favorite").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const n = b.dataset.fav;
+    if (favs.has(n)) favs.delete(n); else favs.add(n);
+    localStorage.setItem("dsh-favs", JSON.stringify([...favs]));
+    render();
+  });
 }
 function catName(k){ const c = DATA.categories[k]; return c ? c.zh : k; }
 function esc(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function copyText(t, btn, okText){
+  navigator.clipboard.writeText(t).then(()=>{
+    if (btn){ const old = btn.textContent; btn.textContent = okText||"已复制"; btn.classList.add("copied");
+      setTimeout(()=>{btn.textContent=old; btn.classList.remove("copied");},1500); }
+  });
+}
 
-const curList = () => filtered();
-let modalIdx = -1;
+/* ---------- 详情 ---------- */
 function openModal(i){
-  const p = curList()[i];
   modalIdx = i;
-  document.getElementById("m-title").textContent = p.title || p.name;
+  const p = filtered()[i];
+  document.getElementById("m-ava").textContent = (p.name||"?").charAt(0).toUpperCase();
+  document.getElementById("m-title").textContent = modalLang==="zh" ? (p.title||p.name) : (p.titleEn||p.title||p.name);
   document.getElementById("m-name").textContent = p.name;
-  const d = document.getElementById("m-desc");
-  d.textContent = p.desc || p.descEn || "无描述";
-  d.className = "pdesc" + (p.desc ? "" : " en");
+  document.getElementById("m-badges").innerHTML = badges(p) + `<span class="badge git">${esc(catName(p.cat))}</span>`;
   document.getElementById("m-meta").innerHTML = `
-    <div><span class="k">分类</span>${catName(p.cat)}</div>
-    <div><span class="k">来源</span>${p.source==="npm"?"npm":"GitHub"}</div>
-    <div><span class="k">Stars</span>${p.stars||0}</div>
-    <div><span class="k">最近更新</span>${esc(p.updated||"-")}</div>
-    <div><span class="k">官方</span>${p.official?"是":"否"}</div>`;
+    <div class="m-cell"><div class="k">Stars</div><div class="v">★ ${p.stars||0}</div></div>
+    <div class="m-cell"><div class="k">来源</div><div class="v">${p.source==="npm"?"npm":"GitHub"}</div></div>
+    <div class="m-cell"><div class="k">最近更新</div><div class="v">${esc((p.updated||"-").slice(0,10))}</div></div>
+    <div class="m-cell"><div class="k">收录时间</div><div class="v">${esc((p.added||"-").slice(0,10))}</div></div>
+    <div class="m-cell"><div class="k">作者</div><div class="v">${esc((p.repo||"").split("/")[0]||"-")}</div></div>
+    <div class="m-cell"><div class="k">可安装</div><div class="v">${p.installable?"✓ 是":"✗ 待补"}</div></div>`;
+  setDesc(p);
   const inst = document.getElementById("m-install");
   if (p.installable && p.install){
     inst.innerHTML = `<div class="install-box"><code>${esc(p.install)}</code><button id="cp">复制</button></div>`;
-    document.getElementById("cp").onclick = e=>{
-      navigator.clipboard.writeText(p.install).then(()=>{
-        const b=e.target; b.textContent="已复制"; b.classList.add("copied");
-        setTimeout(()=>{b.textContent="复制"; b.classList.remove("copied");},1500);
-      });
-    };
+    document.getElementById("cp").onclick = e=>copyText(p.install, e.target, "已复制");
   } else {
-    inst.innerHTML = `<div class="no-install">该插件来源为 Git，安装凭据（commit）待增量管道补齐后开放一键安装；可先到 GitHub 仓库查看。</div>`;
+    inst.innerHTML = `<div class="no-install">该插件为 Git 来源，安装凭据（commit）正由每日增量管道补齐，补齐后即可一键安装。可先前往 GitHub 仓库查看。</div>`;
   }
   document.getElementById("m-links").innerHTML = p.repo
-    ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener">GitHub 仓库 ↗</a>`
+    ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+       <a href="https://github.com/${esc(p.repo)}/stargazers" target="_blank" rel="noopener">Stargazers ↗</a>`
     : "";
   document.getElementById("m-tags").innerHTML = (p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   document.getElementById("mask").classList.add("show");
 }
+function setDesc(p){
+  const d = document.getElementById("m-desc");
+  const zh = p.desc, en = p.descEn;
+  d.textContent = modalLang==="zh" ? (zh||en||"无描述") : (en||zh||"No description");
+  document.getElementById("l-zh").classList.toggle("on", modalLang==="zh");
+  document.getElementById("l-en").classList.toggle("on", modalLang==="en");
+}
+document.getElementById("l-zh").onclick = ()=>{ modalLang="zh"; const p=filtered()[modalIdx]; if(p) setDesc(p); };
+document.getElementById("l-en").onclick = ()=>{ modalLang="en"; const p=filtered()[modalIdx]; if(p) setDesc(p); };
 document.getElementById("close").onclick = ()=>document.getElementById("mask").classList.remove("show");
 document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) document.getElementById("mask").classList.remove("show"); };
 
+/* ---------- 控件 ---------- */
 document.getElementById("q").oninput = e=>{ state.q=e.target.value; render(); };
 document.getElementById("sort").onchange = e=>{ state.sort=e.target.value; render(); };
-document.getElementById("only-inst").onchange = e=>{ state.onlyInst=e.target.checked; render(); };
+document.querySelectorAll(".fchip").forEach(b=>b.onclick=()=>{
+  const f = b.dataset.f;
+  if (state.filters.has(f)) state.filters.delete(f); else state.filters.add(f);
+  b.classList.toggle("on", state.filters.has(f));
+  render();
+});
 document.getElementById("more").onclick = ()=>{
   const list = filtered();
   shownCount = Math.min(shownCount + PAGE, list.length);
   draw(list);
   document.getElementById("shown").textContent = shownCount;
   document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
+};
+document.getElementById("v-row").onclick = ()=>setView("row");
+document.getElementById("v-card").onclick = ()=>setView("card");
+function setView(v){
+  view = v;
+  document.getElementById("v-row").classList.toggle("on", v==="row");
+  document.getElementById("v-card").classList.toggle("on", v==="card");
+  document.getElementById("rows").style.display = v==="row" ? "flex" : "none";
+  document.getElementById("grid").style.display = v==="card" ? "grid" : "none";
+}
+document.getElementById("cp-idx").onclick = e=>{
+  copyText(document.getElementById("idx-url").textContent, e.target, "✓ 已复制");
 };
 load();
 </script>
