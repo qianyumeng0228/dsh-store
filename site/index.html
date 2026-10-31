@@ -71,6 +71,9 @@
   .fchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep);font-weight:600}
   .count-line{font-size:12.5px;color:var(--fg3);margin:0 4px 10px}
   .count-line b{color:var(--fg2)}
+  .loading{text-align:center;color:var(--fg3);padding:70px 0;font-size:13.5px}
+  .loading .spin{display:inline-block;width:18px;height:18px;border:2.5px solid var(--line2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-4px;margin-right:9px}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ---------- 列表视图（默认） ---------- */
   .rows{display:flex;flex-direction:column;gap:8px}
@@ -209,6 +212,7 @@
   </div>
 
   <div class="count-line">显示 <b id="shown">0</b> / <b id="total">0</b> 个插件</div>
+  <div class="loading" id="loading"><span class="spin"></span>正在加载插件数据…</div>
 
   <div class="rows" id="rows"></div>
   <div class="grid" id="grid"></div>
@@ -250,8 +254,11 @@ let favs = new Set(JSON.parse(localStorage.getItem("dsh-favs")||"[]"));
 let modalIdx = -1, modalLang = "zh";
 
 async function load(){
-  const r = await fetch("data/plugins.json");
-  DATA = await r.json();
+  const loading = document.getElementById("loading");
+  try {
+    const r = await fetch("data/plugins.json");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    DATA = await r.json();
   const off = DATA.plugins.filter(p=>p.official).length;
   const seven = DATA.plugins.filter(isNew).length;
   document.getElementById("st-total").textContent = DATA.total;
@@ -261,7 +268,11 @@ async function load(){
   document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
   const base = location.pathname.replace(/[^/]*$/,"");
   document.getElementById("idx-url").textContent = location.origin + base + "index.json";
+  loading.style.display = "none";
   renderCats(); render();
+  } catch(e){
+    loading.innerHTML = "数据加载失败（" + esc(e.message) + "）<br><span style='font-size:12px'>请检查网络后刷新重试</span>";
+  }
 }
 function isNew(p){
   const a = (p.added||"").slice(0,10);
