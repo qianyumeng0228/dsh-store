@@ -1,0 +1,20 @@
+# DSH 插件商店 —— Caddy 站点配置模板
+# 部署到 gcp 后按实际域名替换 dsh.example.com，然后执行:
+#   sudo caddy reload --config /etc/caddy/Caddyfile
+
+dsh.example.com {
+    root * /var/www/dsh-store
+    file_server
+    encode gzip zstd
+
+    # 站点页面/资源缓存 1 小时
+    header Cache-Control "public, max-age=3600"
+
+    # 索引源本体建议短缓存（避免 DSH 拉旧数据）
+    @json path /index.json
+    header @json Cache-Control "public, max-age=300"
+
+    # 安全头
+    header X-Content-Type-Options "nosniff"
+    header X-Frame-Options "SAMEORIGIN"
+}

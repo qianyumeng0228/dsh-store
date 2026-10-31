@@ -1,0 +1,69 @@
+name: build-deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 每天 03:17 UTC（北京时间 11:17）自动刷新索引
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 持久化主库：store.db 缓存跨运行保留，git_commit / npm_version 增量字段持续累积
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/store.db
+            data/store.db-*
+          key: dsh-store-db-v1
+          restore-keys: |
+            dsh-store-db-v1
+
+      - name: Seed (dsh.works 种子导入)
+        run: python pipeline/seed.py
+
+      - name: Incremental (git commit 补齐 + topic 扫描)
+        run: python pipeline/incremental.py --all
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (生成索引与网站)
+        run: python pipeline/build.py
+
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp -r dist/site/* _site/
+          cp dist/index.json _site/index.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

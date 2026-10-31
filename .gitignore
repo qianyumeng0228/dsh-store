@@ -1,0 +1,13 @@
+# 运行时生成物不入库（Actions 云端每次全量重建）
+data/raw/
+data/store.db
+data/store.db-*
+dist/
+
+# Python
+__pycache__/
+*.pyc
+
+# 本地杂项
+.env
+.DS_Store
