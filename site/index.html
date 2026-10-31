@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH 插件商店</title>
+<style>
+  :root{
+    --bg:#0b1017; --bg2:#111827; --bg3:#1a2332;
+    --line:#24344a; --line2:#2e4057;
+    --fg:#e6edf3; --fg2:#9fb0c3; --fg3:#6b7c90;
+    --accent:#00c8c8; --accent2:#39c5bb; --accent-dim:rgba(0,200,200,.12);
+    --warn:#e5b567; --ok:#7ec699;
+    --radius:12px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Consolas,"Cascadia Code",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{padding:22px 28px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0f1a26,var(--bg));position:sticky;top:0;z-index:20;backdrop-filter:blur(8px)}
+  .head-inner{max-width:1280px;margin:0 auto;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-size:22px;font-weight:700;letter-spacing:.5px}
+  h1 .dot{color:var(--accent)}
+  .stats{font-size:13px;color:var(--fg2);display:flex;gap:16px;flex-wrap:wrap}
+  .stats b{color:var(--accent2);font-weight:600}
+  .tagline{margin-left:auto;font-size:12px;color:var(--fg3)}
+  .tagline code{background:var(--bg3);border:1px solid var(--line);padding:2px 7px;border-radius:6px;font-family:var(--mono);font-size:11px;color:var(--fg2)}
+
+  .layout{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:230px 1fr;gap:22px;padding:20px 28px 60px}
+  aside{position:sticky;top:86px;align-self:start}
+  aside h2{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--fg3);margin-bottom:10px}
+  .cat{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:8px;cursor:pointer;color:var(--fg2);font-size:13.5px;border:1px solid transparent;margin-bottom:2px;transition:all .12s}
+  .cat:hover{background:var(--bg3);color:var(--fg)}
+  .cat.active{background:var(--accent-dim);color:var(--accent2);border-color:rgba(0,200,200,.35);font-weight:600}
+  .cat .n{font-size:11px;color:var(--fg3);background:var(--bg3);border-radius:99px;padding:1px 8px}
+  .cat.active .n{color:var(--accent2);background:rgba(0,200,200,.15)}
+
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  .search{flex:1;min-width:220px;position:relative}
+  .search input{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--fg);padding:9px 14px 9px 36px;border-radius:9px;font-size:14px;outline:none;font-family:inherit}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+  .search .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--fg3);font-size:14px;pointer-events:none}
+  select,.btn{background:var(--bg2);border:1px solid var(--line);color:var(--fg2);padding:9px 12px;border-radius:9px;font-size:13px;cursor:pointer;font-family:inherit}
+  select:focus{outline:none;border-color:var(--accent)}
+  .btn:hover{border-color:var(--line2);color:var(--fg)}
+  .check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--fg2);cursor:pointer;user-select:none;white-space:nowrap}
+  .check input{accent-color:var(--accent);width:15px;height:15px}
+
+  .count-line{font-size:12.5px;color:var(--fg3);margin-bottom:12px}
+  .count-line b{color:var(--fg2)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 13px;cursor:pointer;transition:border-color .15s,transform .15s,background .15s;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+  .card:hover{border-color:var(--accent);transform:translateY(-2px);background:var(--bg3)}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
+  .card:hover::before{background:var(--accent)}
+  .card-top{display:flex;align-items:center;gap:8px;min-width:0}
+  .card-top .name{font-family:var(--mono);font-size:13px;color:var(--fg);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-top .src{font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid;flex-shrink:0}
+  .src.npm{color:var(--ok);border-color:rgba(126,198,153,.4);background:rgba(126,198,153,.08)}
+  .src.git{color:var(--warn);border-color:rgba(229,181,103,.4);background:rgba(229,181,103,.08)}
+  .src.no{color:var(--fg3);border-color:var(--line);background:var(--bg3)}
+  .card .desc{font-size:13px;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:40px}
+  .card .desc.en{color:var(--fg3)}
+  .card-bottom{display:flex;align-items:center;gap:10px;margin-top:auto}
+  .card .stars{font-size:12px;color:var(--fg3);display:flex;align-items:center;gap:4px}
+  .card .stars::before{content:"★";color:var(--warn)}
+  .card .cat-tag{font-size:11px;color:var(--accent2);background:var(--accent-dim);padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .card .tags{display:flex;gap:5px;flex-wrap:wrap;flex:1;overflow:hidden}
+  .card .tag{font-size:10.5px;color:var(--fg3);background:var(--bg3);border:1px solid var(--line);padding:1px 7px;border-radius:6px;white-space:nowrap}
+
+  .more-wrap{text-align:center;margin-top:26px}
+  #more{padding:10px 34px;border-radius:9px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent2);font-size:14px;cursor:pointer;font-family:inherit}
+  #more:hover{background:rgba(0,200,200,.2)}
+  .empty{text-align:center;color:var(--fg3);padding:60px 0;font-size:14px}
+
+  .modal-mask{position:fixed;inset:0;background:rgba(5,10,16,.72);backdrop-filter:blur(4px);display:none;z-index:100;align-items:center;justify-content:center;padding:20px}
+  .modal-mask.show{display:flex}
+  .modal{background:var(--bg2);border:1px solid var(--line2);border-radius:16px;max-width:640px;width:100%;max-height:84vh;overflow:auto;padding:26px 28px;position:relative}
+  .modal .close{position:absolute;right:16px;top:14px;background:none;border:none;color:var(--fg3);font-size:22px;cursor:pointer;line-height:1}
+  .modal .close:hover{color:var(--fg)}
+  .modal h2{font-size:19px;margin-bottom:4px;word-break:break-all}
+  .modal .pname{font-family:var(--mono);font-size:13px;color:var(--accent2);margin-bottom:14px}
+  .modal .pdesc{font-size:14px;color:var(--fg);margin-bottom:16px;white-space:pre-wrap}
+  .modal .pdesc.en{color:var(--fg2)}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:13px;color:var(--fg2);margin-bottom:16px}
+  .meta .k{color:var(--fg3);margin-right:6px}
+  .install-box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:13px 15px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .install-box code{font-family:var(--mono);font-size:13px;color:var(--accent2);flex:1;word-break:break-all}
+  .install-box button{background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent2);border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:inherit;flex-shrink:0}
+  .install-box button:hover{background:rgba(0,200,200,.22)}
+  .install-box button.copied{color:var(--ok);border-color:var(--ok);background:rgba(126,198,153,.12)}
+  .no-install{background:var(--bg);border:1px dashed var(--line2);border-radius:10px;padding:12px 15px;font-size:12.5px;color:var(--fg3);margin-bottom:8px}
+  .modal .links{display:flex;gap:14px;font-size:13px;margin-top:6px}
+  .tags-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .tags-row .tag{font-size:11.5px;color:var(--fg2);background:var(--bg3);border:1px solid var(--line);padding:2px 10px;border-radius:99px}
+
+  footer{max-width:1280px;margin:0 auto;padding:0 28px 40px;color:var(--fg3);font-size:12px;display:flex;gap:22px;flex-wrap:wrap;justify-content:space-between}
+  footer code{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:2px 7px;border-radius:6px;color:var(--fg2)}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:static}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-inner">
+    <h1>DSH<span class="dot">·</span>插件商店</h1>
+    <div class="stats">
+      <span>共 <b id="st-total">-</b> 个插件</span>
+      <span>可一键装 <b id="st-ok">-</b></span>
+      <span>更新于 <b id="st-upd">-</b></span>
+    </div>
+    <div class="tagline">索引源：<code id="idx-url">index.json</code> · Plugins → Discover → Index sources</div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>分类</h2>
+    <div id="cats"></div>
+  </aside>
+  <main>
+    <div class="toolbar">
+      <div class="search"><span class="icon">⌕</span>
+        <input id="q" type="text" placeholder="搜索名称 / 描述 / 标签…" autocomplete="off">
+      </div>
+      <select id="sort">
+        <option value="stars">按 Star 排序</option>
+        <option value="updated">按最近更新</option>
+        <option value="name">按名称</option>
+      </select>
+      <label class="check"><input type="checkbox" id="only-inst"> 只看可安装</label>
+    </div>
+    <div class="count-line">显示 <b id="shown">0</b> / <b id="total">0</b></div>
+    <div class="grid" id="grid"></div>
+    <div class="more-wrap"><button id="more">加载更多</button></div>
+    <div class="empty" id="empty" style="display:none">没有匹配的插件</div>
+  </main>
+</div>
+
+<footer>
+  <div>数据源：dsh.works（21,928 条种子）+ GitHub topic:dsh-plugin 增量扫描 · 判真伪依据 <code>package.json</code> 的 <code>dsh</code> 字段</div>
+  <div>安装命令：<code>dsh plugin add &lt;name&gt;</code> / <code>dsh plugin add github:&lt;owner/repo&gt;</code></div>
+</footer>
+
+<div class="modal-mask" id="mask">
+  <div class="modal" id="modal">
+    <button class="close" id="close">&times;</button>
+    <h2 id="m-title"></h2>
+    <div class="pname" id="m-name"></div>
+    <div class="pdesc" id="m-desc"></div>
+    <div class="meta" id="m-meta"></div>
+    <div id="m-install"></div>
+    <div class="links" id="m-links"></div>
+    <div class="tags-row" id="m-tags"></div>
+  </div>
+</div>
+
+<script>
+const PAGE = 60;
+let DATA = null, shownCount = 0;
+let state = { q:"", cat:"all", sort:"stars", onlyInst:false };
+
+async function load(){
+  const r = await fetch("data/plugins.json");
+  DATA = await r.json();
+  document.getElementById("st-total").textContent = DATA.total;
+  document.getElementById("st-ok").textContent = DATA.installable;
+  document.getElementById("st-upd").textContent = DATA.updated;
+  const base = location.pathname.replace(/[^/]*$/, "");
+  document.getElementById("idx-url").textContent = location.origin + base + "index.json";
+  renderCats(); render();
+}
+function renderCats(){
+  const el = document.getElementById("cats");
+  let html = `<div class="cat${state.cat==="all"?" active":""}" data-cat="all"><span>全部</span><span class="n">${DATA.total}</span></div>`;
+  for (const [k,c] of Object.entries(DATA.categories)){
+    html += `<div class="cat${state.cat===k?" active":""}" data-cat="${k}"><span>${c.zh}</span><span class="n">${c.count}</span></div>`;
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".cat").forEach(el=>el.onclick=()=>{ state.cat=el.dataset.cat; renderCats(); render(); });
+}
+function filtered(){
+  const q = state.q.trim().toLowerCase();
+  let list = DATA.plugins;
+  if (state.cat!=="all") list = list.filter(p=>p.cat===state.cat);
+  if (state.onlyInst) list = list.filter(p=>p.installable);
+  if (q){
+    list = list.filter(p =>
+      (p.name||"").toLowerCase().includes(q) ||
+      (p.title||"").toLowerCase().includes(q) ||
+      (p.desc||"").toLowerCase().includes(q) ||
+      (p.tags||[]).some(t=>t.toLowerCase().includes(q)));
+  }
+  const s = state.sort;
+  list.sort((a,b)=>{
+    if (s==="stars") return (b.stars||0)-(a.stars||0);
+    if (s==="updated") return (b.updated||"").localeCompare(a.updated||"");
+    return (a.name||"").localeCompare(b.name||"");
+  });
+  return list;
+}
+function render(){
+  const list = filtered();
+  document.getElementById("total").textContent = list.length;
+  document.getElementById("empty").style.display = list.length ? "none" : "block";
+  shownCount = Math.min(PAGE, list.length);
+  draw(list);
+  document.getElementById("shown").textContent = shownCount;
+  document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
+}
+function draw(list){
+  const grid = document.getElementById("grid");
+  let html = "";
+  for (let i=0;i<shownCount;i++){
+    const p = list[i];
+    const srcCls = p.installable ? (p.source==="npm"?"npm":"git") : "no";
+    const srcTxt = p.installable ? (p.source==="npm"?"npm":"git") : "待补";
+    const desc = p.desc || p.descEn;
+    html += `<div class="card" data-i="${i}" onclick="openModal(${i})">
+      <div class="card-top"><span class="name">${esc(p.name)}</span><span class="src ${srcCls}">${srcTxt}</span></div>
+      <div class="desc${p.desc?"":" en"}">${esc(desc||"无描述")}</div>
+      <div class="card-bottom">
+        <span class="stars">${p.stars||0}</span>
+        <span class="cat-tag">${catName(p.cat)}</span>
+        <span class="tags">${(p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</span>
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+function catName(k){ const c = DATA.categories[k]; return c ? c.zh : k; }
+function esc(s){ return (s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+const curList = () => filtered();
+let modalIdx = -1;
+function openModal(i){
+  const p = curList()[i];
+  modalIdx = i;
+  document.getElementById("m-title").textContent = p.title || p.name;
+  document.getElementById("m-name").textContent = p.name;
+  const d = document.getElementById("m-desc");
+  d.textContent = p.desc || p.descEn || "无描述";
+  d.className = "pdesc" + (p.desc ? "" : " en");
+  document.getElementById("m-meta").innerHTML = `
+    <div><span class="k">分类</span>${catName(p.cat)}</div>
+    <div><span class="k">来源</span>${p.source==="npm"?"npm":"GitHub"}</div>
+    <div><span class="k">Stars</span>${p.stars||0}</div>
+    <div><span class="k">最近更新</span>${esc(p.updated||"-")}</div>
+    <div><span class="k">官方</span>${p.official?"是":"否"}</div>`;
+  const inst = document.getElementById("m-install");
+  if (p.installable && p.install){
+    inst.innerHTML = `<div class="install-box"><code>${esc(p.install)}</code><button id="cp">复制</button></div>`;
+    document.getElementById("cp").onclick = e=>{
+      navigator.clipboard.writeText(p.install).then(()=>{
+        const b=e.target; b.textContent="已复制"; b.classList.add("copied");
+        setTimeout(()=>{b.textContent="复制"; b.classList.remove("copied");},1500);
+      });
+    };
+  } else {
+    inst.innerHTML = `<div class="no-install">该插件来源为 Git，安装凭据（commit）待增量管道补齐后开放一键安装；可先到 GitHub 仓库查看。</div>`;
+  }
+  document.getElementById("m-links").innerHTML = p.repo
+    ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener">GitHub 仓库 ↗</a>`
+    : "";
+  document.getElementById("m-tags").innerHTML = (p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  document.getElementById("mask").classList.add("show");
+}
+document.getElementById("close").onclick = ()=>document.getElementById("mask").classList.remove("show");
+document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) document.getElementById("mask").classList.remove("show"); };
+
+document.getElementById("q").oninput = e=>{ state.q=e.target.value; render(); };
+document.getElementById("sort").onchange = e=>{ state.sort=e.target.value; render(); };
+document.getElementById("only-inst").onchange = e=>{ state.onlyInst=e.target.checked; render(); };
+document.getElementById("more").onclick = ()=>{
+  const list = filtered();
+  shownCount = Math.min(shownCount + PAGE, list.length);
+  draw(list);
+  document.getElementById("shown").textContent = shownCount;
+  document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
+};
+load();
+</script>
+</body>
+</html>

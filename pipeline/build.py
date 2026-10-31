@@ -4,6 +4,7 @@
 - git 插件：只收录已补齐 commit 的（incremental.py 负责补齐）
 """
 import json
+import shutil
 import sqlite3
 import sys
 import time
@@ -237,6 +238,10 @@ def main():
     (config.SITE_DIR / "data").mkdir(parents=True, exist_ok=True)
     (config.SITE_DIR / "data" / "plugins.json").write_text(
         json.dumps(site_data, ensure_ascii=False), encoding="utf-8")
+    # 网站源码（仓库 site/ 目录）合并进输出
+    src_html = config.ROOT / "site" / "index.html"
+    if src_html.exists():
+        shutil.copy(src_html, config.SITE_DIR / "index.html")
     print(f"[build] 网站数据: {len(site_plugins)} 条，可一键装 {site_data['installable']} 条")
     print(f"[build] 分类分布: {json.dumps(cat_stats, ensure_ascii=False)}")
     conn.close()
