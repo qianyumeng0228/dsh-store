@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -53,6 +53,21 @@ jobs:
 
       - name: Build (生成索引与网站)
         run: python pipeline/build.py
+
+      # 把最新索引同步回仓库根目录，供 jsDelivr CDN 镜像（DSH 索引源加速备用）
+      # 内容未变化时不提交，避免触发循环构建
+      - name: Commit index.json to repo (jsDelivr mirror)
+        run: |
+          cp dist/index.json ./index.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- index.json; then
+            echo "index.json unchanged; skip commit"
+          else
+            git add index.json
+            git commit -m "chore: update index.json [skip ci]"
+            git push origin main
+          fi
 
       - name: Stage site
         run: |
