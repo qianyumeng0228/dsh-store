@@ -100,8 +100,14 @@ def load_icon_maps():
         if r:
             target["repo"].setdefault(r, icon_url)
 
-    # ① dshopen 索引（本地副本）
+    # ① dshopen 索引（本地副本；缺失时尝试下载一次，失败则跳过）
     try:
+        if not config.DSHOPEN_FILE.exists():
+            import urllib.request
+            req = urllib.request.Request(config.DSHOPEN_INDEX_URL,
+                                        headers={"User-Agent": "dsh-store/0.1"})
+            with urllib.request.urlopen(req, timeout=90) as r:
+                config.DSHOPEN_FILE.write_bytes(r.read())
         data = json.loads(config.DSHOPEN_FILE.read_text(encoding="utf-8"))
         for p in data.get("plugins", []):
             icon = p.get("icon") or ""

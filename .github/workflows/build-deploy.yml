@@ -37,6 +37,12 @@ jobs:
           restore-keys: |
             dsh-store-db-v1
 
+      - name: Fetch icon source indexes
+        run: |
+          mkdir -p data/raw
+          curl -fsSL --retry 2 --connect-timeout 20 -o data/raw/dshopen.json https://dshopen.org/index.json || echo "dshopen fetch failed (non-fatal)"
+          curl -fsSL --retry 2 --connect-timeout 20 -o data/raw/awesome-plugins.json https://awesome-dsh-plugin.com/plugins.json || echo "awesome fetch failed (non-fatal)"
+
       - name: Seed (dsh.works 种子导入)
         run: python pipeline/seed.py
 

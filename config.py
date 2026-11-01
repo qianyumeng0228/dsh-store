@@ -44,6 +44,7 @@ ICON_BATCH = 400
 
 # 图标次级源（dshopen.org / awesome-dsh-plugin.com）
 DSHOPEN_BASE = "https://dshopen.org/"
+DSHOPEN_INDEX_URL = DSHOPEN_BASE + "index.json"
 DSHOPEN_FILE = RAW_DIR / "dshopen.json"
 AWESOME_URL = "https://awesome-dsh-plugin.com/plugins.json"
 AWESOME_FILE = RAW_DIR / "awesome-plugins.json"
