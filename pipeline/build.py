@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
+from db import ensure_schema, load_icon_maps
 
 NPM_REGISTRY = "https://registry.npmjs.org"
 
@@ -64,7 +65,8 @@ def fetch_rows(conn, statuses, categories):
     q = """
         SELECT name, repo, path, title_en, title_zh, desc_en, desc_zh, tags, stars,
                install_source, npm, git_commit, npm_version, category_key, pushed_at,
-               official, evidence, status, added, verified_against
+               official, evidence, status, added, verified_against,
+               npm_repo, dsh_engines, git_latest_commit
         FROM plugins
         WHERE status IN ({})
           AND category IN ({})
@@ -85,9 +87,32 @@ def load_downloads(conn):
     return m
 
 
+def load_npm_meta(conn):
+    """npm 包 latest 版本映射（incremental.py --updates 维护）。"""
+    m = {}
+    try:
+        for r in conn.execute("SELECT pkg, latest FROM npm_meta"):
+            m[r[0]] = r[1]
+    except sqlite3.OperationalError:
+        pass
+    return m
+
+
+def load_icon_probe(conn):
+    """repo -> 命中的图标相对路径映射（incremental.py --icons 维护）。"""
+    m = {}
+    try:
+        for r in conn.execute("SELECT repo, icon_path FROM icon_probe WHERE icon_path IS NOT NULL AND icon_path!=''"):
+            m[r[0].lower()] = r[1]
+    except sqlite3.OperationalError:
+        pass
+    return m
+
+
 def main():
     config.ensure_dirs()
     conn = sqlite3.connect(config.DB_PATH)
+    ensure_schema(conn)
     rows = fetch_rows(conn, config.INDEX_STATUSES, config.INDEX_CATEGORIES)
     print(f"[build] 候选（verified+plugin/bundle）: {len(rows)}")
 
@@ -120,6 +145,10 @@ def main():
     skipped_git_nocommit = 0
     dup = 0
     downloads_map = load_downloads(conn)
+    npm_meta_map = load_npm_meta(conn)
+    probe_map = load_icon_probe(conn)
+    dshopen_maps, awesome_maps = load_icon_maps()
+    print(f"[build] 图标源: dshopen {len(dshopen_maps['name'])} 条 / awesome {len(awesome_maps['name'])} 条 / 探测命中 {len(probe_map)} 个仓库")
 
     rows = fetch_rows(conn, config.INDEX_STATUSES, config.INDEX_CATEGORIES)
     for r in rows:
@@ -131,10 +160,40 @@ def main():
         git_commit = r["git_commit"]; npm_version = r["npm_version"]
         cat_key = r["category_key"]; pushed_at = r["pushed_at"]
         official = r["official"]
+        npm_repo = r["npm_repo"] or ""
+        dsh_engines = r["dsh_engines"] or ""
+        git_latest = r["git_latest_commit"] or ""
         try:
             tags = json.loads(tags) if tags else []
         except Exception:
             tags = []
+
+        # ---- 新字段：author / avatar / latestVersion / hasUpdate / dsh / icon ----
+        if install_source == "npm":
+            author = npm_repo.split("/")[0] if "/" in npm_repo else ""
+            latest = npm_meta_map.get(npm) if npm else None
+            latest_version = latest or ""
+            has_update = bool(latest) and bool(npm_version) and latest != npm_version
+            dsh_str = dsh_engines or ""
+        else:
+            author = repo.split("/")[0] if "/" in repo else ""
+            latest_version = git_latest[:7] if git_latest else ""
+            has_update = bool(git_latest) and bool(git_commit) and git_latest != git_commit
+            dsh_str = ""
+        avatar = f"https://github.com/{author}.png?size=64" if author else ""
+
+        def _icon_from(maps):
+            k = (name or "").lower()
+            rk = (repo or "").lower()
+            if k and k in maps["name"]:
+                return maps["name"][k]
+            if rk and rk in maps["repo"]:
+                return maps["repo"][rk]
+            return ""
+
+        icon = _icon_from(dshopen_maps) or _icon_from(awesome_maps)
+        if not icon and repo and repo.lower() in probe_map:
+            icon = f"https://raw.githubusercontent.com/{repo}/HEAD/{probe_map[repo.lower()]}"
 
         # ---- 决定可安装性与安装标识 ----
         installable = False
@@ -183,7 +242,9 @@ def main():
             "name": pname,
             "title": {"en": title_en or pname, "zh": title_zh or title_en or pname},
             "description": {"en": desc_en or "", "zh": desc_zh or ""},
-            "author": repo.split("/")[0] if "/" in repo else "",
+            "author": author,
+            "avatar": avatar,
+            "icon": icon,
             "homepage": f"https://github.com/{repo}#readme" if repo else "",
             "repository": {"url": f"https://github.com/{repo}"} if repo else {},
             "metadata": {
@@ -216,6 +277,8 @@ def main():
             "version": npm_version or "",
             "verified": r["verified_against"] or "",
             "downloads": downloads_map.get(npm, 0) if install_source == "npm" else 0,
+            "author": author, "avatar": avatar, "icon": icon,
+            "dsh": dsh_str, "latestVersion": latest_version, "hasUpdate": bool(has_update),
         })
         cat_stats[cat_key] = cat_stats.get(cat_key, 0) + 1
 

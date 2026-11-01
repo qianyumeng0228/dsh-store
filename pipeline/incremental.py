@@ -3,11 +3,21 @@
 1. --commit-only：给 git-only 插件补默认分支最新 commit（GitHub API）
    无 token 时受 60 req/h 限制，每轮只补最活跃的 N 个；有 token 补 5,000 上限。
 2. --scan-new：扫 GitHub topic:dsh-plugin 新仓库，探测 package.json 的 dsh 字段，入库。
-3. --all：先补 commit，再扫新仓库。
+3. --downloads：npm 插件近 30 天下载量（api.npmjs.org）。
+4. --updates：更新检测
+   - npm：registry.npmjs.org/{pkg}/latest 刷新 npm_meta（latest/latest_since/checked），
+     同时解析 repository.url 存 npm_repo、engines.dsh 存 dsh_engines；
+     latest 与收录版差异满 7 天则把 npm_version 追平为 latest。
+   - git：按 stars 降序批量刷新 git_latest_commit；git_checked 记录差异开始日，
+     差异满 7 天则把 git_commit 追平。
+5. --icons：按 stars 降序批量探测仓库常见图标路径（raw.githubusercontent HEAD），
+   命中存 icon_probe.icon_path，7 天内已探测的跳过。
+6. --all：commit-only + downloads + updates + icons + scan-new。
 
 用法:
     python pipeline/incremental.py --commit-only
     python pipeline/incremental.py --scan-new
+    python pipeline/incremental.py --updates --icons
     python pipeline/incremental.py --all
 环境变量 GITHUB_TOKEN 可选（推荐提供，速度差两个数量级）。
 """
@@ -19,15 +29,26 @@ import sys
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
+from db import ensure_schema, parse_github_repo
 
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 NPM_DL_API = "https://api.npmjs.org/downloads/point/last-month"
+NPM_REGISTRY = "https://registry.npmjs.org"
+
+# 图标探测候选路径（raw.githubusercontent.com/{repo}/HEAD/{path}）
+ICON_CANDIDATES = [
+    "assets/icon.png", "assets/logo.png",
+    "docs/icon.png", "docs/logo.png",
+    "icon.png", "logo.png",
+    "assets/icons/icon.png", "static/icon.png",
+]
 
 
 def api_get(url, timeout=20):
@@ -230,16 +251,258 @@ def fill_downloads(conn, limit):
     return ok
 
 
+# ---------------------------------------------------------------- updates ----
+
+def _today():
+    return time.strftime("%Y-%m-%d")
+
+
+def _days_ago(n):
+    return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
+
+
+def npm_latest_full(pkg: str):
+    """registry.npmjs.org/{pkg}/latest。
+    返回 dict {latest, repo, engines_dsh}；404 返回 {latest: None}；网络失败返回 None。"""
+    url = f"{NPM_REGISTRY}/{urllib.parse.quote(pkg, safe='@/')}/latest"
+    try:
+        req = Request(url, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
+        with urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except HTTPError as e:
+        if e.code == 404:
+            return {"latest": None, "repo": "", "engines_dsh": None}
+        return None
+    except Exception:
+        return None
+    repo_url = ""
+    repo_field = data.get("repository")
+    if isinstance(repo_field, dict):
+        repo_url = repo_field.get("url") or ""
+    elif isinstance(repo_field, str):
+        repo_url = repo_field
+    eng = (data.get("engines") or {}).get("dsh")
+    return {"latest": data.get("version"),
+            "repo": parse_github_repo(repo_url),
+            "engines_dsh": eng}
+
+
+def updates_npm(conn):
+    """npm 更新检测：刷新 npm_meta + npm_repo + dsh_engines；差异满 7 天追平 npm_version。"""
+    ensure_schema(conn)
+    today = _today()
+    cutoff_7 = _days_ago(7)
+    rows = conn.execute("""
+        SELECT name, npm FROM plugins
+        WHERE install_source='npm' AND npm IS NOT NULL AND npm!=''
+        ORDER BY stars DESC
+    """).fetchall()
+    print(f"[updates-npm] 待刷新 {len(rows)} 个 npm 包")
+    if not rows:
+        return 0
+
+    results = []
+    fails = 0
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        futs = {ex.submit(npm_latest_full, npm): (name, npm) for name, npm in rows}
+        done = 0
+        for fut in as_completed(futs):
+            name, npm = futs[fut]
+            res = fut.result()
+            done += 1
+            if res is None:
+                fails += 1
+            else:
+                results.append((name, npm, res))
+            if done % 1000 == 0:
+                print(f"[updates-npm] 进度 {done}/{len(rows)}")
+    total = len(rows)
+    if total and fails / total > 0.3:
+        print(f"[updates-npm] 失败率 {fails}/{total} >30%，本轮中断，保留旧数据")
+        return 0
+
+    n_meta = n_repo = n_eng = n_catchup = 0
+    for name, npm, res in results:
+        latest = res.get("latest")
+        prev = conn.execute(
+            "SELECT latest, latest_since FROM npm_meta WHERE pkg=?", (npm,)).fetchone()
+        if prev is None:
+            since = today
+            conn.execute(
+                "INSERT INTO npm_meta(pkg,latest,latest_since,checked) VALUES(?,?,?,?)",
+                (npm, latest, since, today))
+        else:
+            prev_latest, prev_since = prev
+            since = today if latest != prev_latest else (prev_since or today)
+            conn.execute(
+                "UPDATE npm_meta SET latest=?, latest_since=?, checked=? WHERE pkg=?",
+                (latest, since, today, npm))
+        n_meta += 1
+        if res.get("repo"):
+            conn.execute(
+                "UPDATE plugins SET npm_repo=? WHERE name=? AND (npm_repo IS NULL OR npm_repo='')",
+                (res["repo"], name))
+            n_repo += 1
+        if res.get("engines_dsh") is not None:
+            conn.execute("UPDATE plugins SET dsh_engines=? WHERE name=?",
+                         (res["engines_dsh"], name))
+            n_eng += 1
+        # 收录版本追平：latest != 收录版本 且 latest_since 距今 >= 7 天
+        if latest:
+            nv = conn.execute(
+                "SELECT npm_version FROM plugins WHERE name=?", (name,)).fetchone()
+            nv = nv[0] if nv else None
+            if nv and latest != nv and since <= cutoff_7:
+                conn.execute("UPDATE plugins SET npm_version=? WHERE name=?",
+                             (latest, name))
+                n_catchup += 1
+    conn.commit()
+    print(f"[updates-npm] 完成: npm_meta {n_meta} / 解析仓库 {n_repo} / engines.dsh {n_eng} / 追平 {n_catchup}")
+    return n_meta
+
+
+def updates_git(conn, batch):
+    """git 更新检测：批量刷新 git_latest_commit；差异满 7 天追平 git_commit。"""
+    ensure_schema(conn)
+    today = _today()
+    cutoff_7 = _days_ago(7)
+    rows = conn.execute("""
+        SELECT name, repo, git_commit FROM plugins
+        WHERE install_source='git' AND repo IS NOT NULL AND repo!=''
+          AND (git_checked IS NULL OR git_checked='' OR git_checked <= ?)
+        ORDER BY stars DESC LIMIT ?
+    """, (cutoff_7, batch)).fetchall()
+    print(f"[updates-git] 待刷新 {len(rows)} 个仓库（batch={batch}）")
+    if not rows:
+        return 0
+
+    def work(item):
+        nm, rp, gc = item
+        sha = repo_commit(rp)
+        return nm, rp, gc, sha
+
+    n_newdiff = n_catchup = n_nodiff = 0
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(work, r): r for r in rows}
+        done = 0
+        for fut in as_completed(futs):
+            nm, rp, gc, sha = fut.result()
+            done += 1
+            if not sha:
+                continue
+            if not gc:
+                conn.execute("UPDATE plugins SET git_latest_commit=? WHERE name=?", (sha, nm))
+            elif sha != gc:
+                # 发现差异：git_checked 为空 -> 置今天；已满 7 天 -> 追平
+                old_checked = conn.execute(
+                    "SELECT git_checked FROM plugins WHERE name=?", (nm,)).fetchone()
+                old_checked = old_checked[0] if old_checked else ""
+                if not old_checked:
+                    conn.execute(
+                        "UPDATE plugins SET git_latest_commit=?, git_checked=? WHERE name=?",
+                        (sha, today, nm))
+                    n_newdiff += 1
+                elif old_checked <= cutoff_7:
+                    conn.execute(
+                        "UPDATE plugins SET git_latest_commit=?, git_commit=?, git_checked='' WHERE name=?",
+                        (sha, sha, nm))
+                    n_catchup += 1
+                # 差异未满 7 天的本轮已被 SQL 过滤掉，不会落到这里
+            else:
+                # 无差异：记录最新 commit，清空 git_checked
+                conn.execute(
+                    "UPDATE plugins SET git_latest_commit=?, git_checked='' WHERE name=?",
+                    (sha, nm))
+                n_nodiff += 1
+            if done % 200 == 0:
+                conn.commit()
+                print(f"[updates-git] 进度 {done}/{len(rows)}")
+    conn.commit()
+    print(f"[updates-git] 完成: 新差异 {n_newdiff} / 追平 {n_catchup} / 无差异 {n_nodiff}")
+    return done
+
+
+# ------------------------------------------------------------------ icons ----
+
+def probe_icon(repo: str):
+    """HEAD 探测仓库图标路径，命中返回相对路径，没找到返回 ''。"""
+    for path in ICON_CANDIDATES:
+        try:
+            req = Request(f"https://raw.githubusercontent.com/{repo}/HEAD/{path}",
+                          method="HEAD", headers={"User-Agent": "dsh-store/0.1"})
+            with urlopen(req, timeout=8) as r:
+                ct = (r.headers.get("Content-Type") or "").lower()
+                if r.status == 200 and ct.startswith("image/"):
+                    return path
+        except HTTPError as e:
+            if e.code in (404, 403):
+                continue
+            continue
+        except Exception:
+            continue
+    return ""
+
+
+def icons_probe(conn, batch):
+    """按 stars 降序批量探测仓库图标，结果写 icon_probe。"""
+    ensure_schema(conn)
+    today = _today()
+    cutoff_7 = _days_ago(7)
+    rows = conn.execute("""
+        SELECT repo FROM (
+            SELECT repo, MAX(stars) AS st FROM plugins
+            WHERE repo IS NOT NULL AND repo!='' GROUP BY repo
+            UNION
+            SELECT npm_repo AS repo, MAX(stars) AS st FROM plugins
+            WHERE npm_repo IS NOT NULL AND npm_repo!='' GROUP BY npm_repo
+        )
+        WHERE NOT EXISTS (
+            SELECT 1 FROM icon_probe ip WHERE ip.repo = repo AND ip.checked > ?
+        )
+        ORDER BY st DESC LIMIT ?
+    """, (cutoff_7, batch)).fetchall()
+    print(f"[icons] 待探测 {len(rows)} 个仓库（batch={batch}）")
+    if not rows:
+        return 0
+
+    hits = 0
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futs = {ex.submit(probe_icon, r[0]): r[0] for r in rows}
+        done = 0
+        for fut in as_completed(futs):
+            repo = futs[fut]
+            path = fut.result()
+            done += 1
+            conn.execute(
+                "INSERT OR REPLACE INTO icon_probe(repo, icon_path, checked) VALUES(?,?,?)",
+                (repo, path, today))
+            if path:
+                hits += 1
+            if done % 500 == 0:
+                conn.commit()
+                print(f"[icons] 进度 {done}/{len(rows)}，命中 {hits}")
+    conn.commit()
+    print(f"[icons] 完成: 探测 {done} / 命中 {hits}")
+    return hits
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit-only", action="store_true")
     ap.add_argument("--scan-new", action="store_true")
     ap.add_argument("--downloads", action="store_true")
+    ap.add_argument("--updates", action="store_true", help="npm + git 更新检测")
+    ap.add_argument("--icons", action="store_true", help="仓库图标路径探测")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--git-batch", type=int, default=config.GIT_UPDATE_BATCH,
+                    help="git 更新检测每轮仓库数（默认 config.GIT_UPDATE_BATCH）")
+    ap.add_argument("--icon-batch", type=int, default=config.ICON_BATCH,
+                    help="图标探测每轮仓库数（默认 config.ICON_BATCH）")
     args = ap.parse_args()
 
     config.ensure_dirs()
     conn = sqlite3.connect(config.DB_PATH)
+    ensure_schema(conn)
     git_pending = conn.execute(
         "SELECT COUNT(*) FROM plugins WHERE install_source='git' AND (git_commit IS NULL OR git_commit='')"
     ).fetchone()[0]
@@ -250,6 +513,11 @@ def main():
         fill_commits(conn, limit)
     if args.downloads or args.all:
         fill_downloads(conn, config.NPM_DL_BATCH)
+    if args.updates or args.all:
+        updates_npm(conn)
+        updates_git(conn, args.git_batch)
+    if args.icons or args.all:
+        icons_probe(conn, args.icon_batch)
     if args.scan_new or args.all:
         scan_new(conn)
     conn.close()

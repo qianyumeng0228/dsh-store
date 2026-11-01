@@ -83,6 +83,8 @@ def main():
 
     conn = sqlite3.connect(config.DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
+    from db import ensure_schema
+    ensure_schema(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS plugins (
             name            TEXT PRIMARY KEY,

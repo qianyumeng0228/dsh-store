@@ -37,6 +37,17 @@ GIT_COMMIT_BATCH_TOKEN = 2000
 # npm 下载量（近30天）单轮补齐上限（GitHub Actions runner 对 npm API 限流较严，用小批量防超时）
 NPM_DL_BATCH = 800
 
+# git 更新检测：每轮刷新 git_latest_commit 的仓库数（按 stars 降序，7 天内已探测的跳过）
+GIT_UPDATE_BATCH = 500
+# 图标探测：每轮 HEAD 探测的仓库数（按 stars 降序，7 天内已探测的跳过）
+ICON_BATCH = 400
+
+# 图标次级源（dshopen.org / awesome-dsh-plugin.com）
+DSHOPEN_BASE = "https://dshopen.org/"
+DSHOPEN_FILE = RAW_DIR / "dshopen.json"
+AWESOME_URL = "https://awesome-dsh-plugin.com/plugins.json"
+AWESOME_FILE = RAW_DIR / "awesome-plugins.json"
+
 # ---------- 分类（tags -> categories，中英双语） ----------
 # 参考 awesome-dsh-plugin.com 的 16 分类体系 + dsh.works 的 tags
 CATEGORY_DEFS = {
