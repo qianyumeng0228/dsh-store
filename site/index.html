@@ -291,6 +291,7 @@
       <div class="stat">可装 <b class="ok" id="st-ok">-</b></div>
       <div class="stat">新增 <b id="st-new">-</b></div>
       <div class="stat">更新 <b id="st-upd" style="font-size:11px">-</b></div>
+      <button class="cp" id="btn-allupd" title="复制所有检测到有新版本插件的更新命令（重新安装即更新到最新版）">🔄 全部更新 <b id="st-upd2">0</b></button>
     </div>
   </div>
   <div class="idxbar"><div class="in">
@@ -494,6 +495,9 @@ async function load(){
     document.getElementById("st-ok").textContent = DATA.installable;
     document.getElementById("st-new").textContent = seven;
     document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
+    const updAll = DATA.plugins.filter(p=>p.hasUpdate).length;
+    document.getElementById("st-upd2").textContent = updAll;
+    document.getElementById("btn-allupd").onclick = copyAllUpdates;
     const base = location.pathname.replace(/[^/]*$/,"");
     document.getElementById("idx-url").textContent = location.origin + base + "index.json";
     loading.style.display = "none";
@@ -575,7 +579,9 @@ function filtered(){
       if (f==="fav") list = list.filter(p=>favs.has(p.name));
       if (f==="installed") list = list.filter(p=>installed.has(p.name));
     }
+    const beforeCompat = list.length;
     list = list.filter(compatOk);
+    state._hiddenByCompat = beforeCompat - list.length;
   }
   const q = state.q.trim().toLowerCase();
   if (q){
@@ -639,6 +645,9 @@ function render(){
   if (state.tab==="theme"){
     document.getElementById("note-line").style.display = "block";
     document.getElementById("note-line").textContent = "主题页展示「界面增强」分类与 theme/appearance 标签的插件，共 " + list.length + " 个";
+  } else if (isBrowse && state.dshVer && (state._hiddenByCompat||0)>0){
+    document.getElementById("note-line").style.display = "block";
+    document.getElementById("note-line").textContent = "⚠️ 已按 DSH " + esc(state.dshVer) + " 兼容过滤，隐藏了 " + (state._hiddenByCompat||0) + " 个声明不兼容的插件（未声明宿主要求的插件仍显示，与 dsh-market 口径一致）";
   }
   renderDock();
 }
@@ -885,6 +894,13 @@ function copyAllQueue(e){
   if (!qlist.length){ toast("待装清单为空"); return; }
   const all = qlist.map(p=>p.install).join("\n");
   navigator.clipboard.writeText(all).then(()=>toast("已复制 " + qlist.length + " 条安装命令 ✓")).catch(()=>toast("复制失败"));
+}
+function copyAllUpdates(){
+  const upd = DATA.plugins.filter(p=>p.hasUpdate);
+  if (!upd.length){ toast("当前没有检测到有新版本的插件"); return; }
+  const cmds = upd.map(p=> p.source==="npm" ? `dsh plugin add ${p.name}` : `dsh plugin add github:${p.repo}`);
+  const text = "# DSH 插件更新清单（共 " + upd.length + " 个：npm 源重装 latest，git 源重装默认分支最新提交）\n" + cmds.join("\n");
+  navigator.clipboard.writeText(text).then(()=>toast("已复制 " + upd.length + " 条更新命令 ✓")).catch(()=>toast("复制失败，请手动复制"));
 }
 
 /* ---------- 提交插件页 ---------- */
