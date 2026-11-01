@@ -41,6 +41,7 @@ from db import ensure_schema, parse_github_repo
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 NPM_DL_API = "https://api.npmjs.org/downloads/point/last-month"
 NPM_REGISTRY = "https://registry.npmjs.org"
+NPM_MIRROR = "https://registry.npmmirror.com"
 
 # 图标探测候选路径（raw.githubusercontent.com/{repo}/HEAD/{path}）
 ICON_CANDIDATES = [
@@ -261,31 +262,33 @@ def _days_ago(n):
     return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
 
 
-def _registry_get_json(url, timeout=25, retries=4):
-    """registry 请求，带指数退避重试（429/5xx/超时/连接错误都重试）。"""
+def _registry_get_json(url, timeout=20, retries=2):
+    """registry 请求：官方源失败（429/5xx/超时/连接）自动降级 npmmirror 镜像，
+    每源在 retries+1 轮里各尝试一次；404 直接抛；全部失败抛最后异常。"""
+    mirror = url.replace(NPM_REGISTRY, NPM_MIRROR, 1) if url.startswith(NPM_REGISTRY) else None
     last = None
-    for i in range(retries + 1):
-        try:
-            req = Request(url, headers={"User-Agent": "dsh-store/0.1",
-                                        "Accept": "application/json"})
-            with urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8"))
-        except HTTPError as e:
-            last = e
-            if e.code == 404:
-                return None  # 包不存在，无需重试
-            wait = 2 ** i
-            if e.code == 429:
-                wait = max(wait, 5)  # 限流多等
-            time.sleep(wait)
-        except Exception as e:
-            last = e
-            time.sleep(2 ** i)
+    for attempt in range(retries + 1):
+        for src in ([url] + ([mirror] if mirror else [])):
+            try:
+                req = Request(src, headers={"User-Agent": "dsh-store/0.1",
+                                            "Accept": "application/json"})
+                with urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            except HTTPError as e:
+                last = e
+                if e.code == 404:
+                    raise
+                continue
+            except Exception as e:
+                last = e
+                continue
+        if attempt < retries:
+            time.sleep(1.5 * (attempt + 1))
     raise last
 
 
 def npm_latest_full(pkg: str):
-    """registry.npmjs.org/{pkg}/latest。
+    """registry.npmjs.org/{pkg}/latest（失败自动走 npmmirror）。
     返回 dict {latest, repo, engines_dsh}；404 返回 {latest: None}；重试耗尽返回 None。"""
     url = f"{NPM_REGISTRY}/{urllib.parse.quote(pkg, safe='@/')}/latest"
     try:

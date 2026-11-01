@@ -18,27 +18,29 @@ import config
 from db import ensure_schema, load_icon_maps
 
 NPM_REGISTRY = "https://registry.npmjs.org"
+NPM_MIRROR = "https://registry.npmmirror.com"
 
 
-def http_get_json(url, timeout=25, retries=4):
-    """带指数退避重试（429/5xx/超时/连接错误）；404 直接抛 HTTPError 由调用方处理。"""
+def http_get_json(url, timeout=20, retries=2):
+    """官方源失败（429/5xx/超时/连接）自动降级 npmmirror 镜像；404 抛 HTTPError。"""
+    mirror = url.replace(NPM_REGISTRY, NPM_MIRROR, 1) if url.startswith(NPM_REGISTRY) else None
     last = None
     for i in range(retries + 1):
-        try:
-            req = Request(url, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
-            with urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8"))
-        except HTTPError as e:
-            last = e
-            if e.code == 404:
-                raise
-            wait = 2 ** i
-            if e.code == 429:
-                wait = max(wait, 5)
-            time.sleep(wait)
-        except Exception as e:
-            last = e
-            time.sleep(2 ** i)
+        for src in ([url] + ([mirror] if mirror else [])):
+            try:
+                req = Request(src, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
+                with urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            except HTTPError as e:
+                last = e
+                if e.code == 404:
+                    raise
+                continue
+            except Exception as e:
+                last = e
+                continue
+        if i < retries:
+            time.sleep(1.5 * (i + 1))
     raise last
 
 
