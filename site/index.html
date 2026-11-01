@@ -407,6 +407,78 @@ let installed = new Set(JSON.parse(localStorage.getItem("dsh-installed")||"[]"))
 let blocked = new Set(JSON.parse(localStorage.getItem("dsh-blocked")||"[]"));
 let queue = new Set(JSON.parse(localStorage.getItem("dsh-queue")||"[]"));
 
+/* ---------- 宿主模式（dsh-store-market 插件内运行时启用） ---------- */
+let HOST = null;
+async function probeHost(){
+  try {
+    const r = await fetch("api/capabilities", {cache:"no-store"});
+    if (!r.ok) return;
+    HOST = await r.json();
+    const ir = await fetch("api/installed", {cache:"no-store"});
+    if (ir.ok){ const d = await ir.json(); installed = new Set(d.installed||[]); }
+    document.body.classList.add("host");
+    const cb = document.getElementById("copy-all");
+    if (cb) cb.textContent = "全部安装";
+    const qh = document.getElementById("qhint");
+    if (qh) qh.textContent = "点插件上的 ⤓ 加入待装清单，一起真实安装";
+  } catch(e){ HOST = null; }
+}
+async function hostInstall(p, btn){
+  const old = btn ? btn.textContent : "";
+  if (btn){ btn.textContent = "安装中…"; btn.disabled = true; }
+  try {
+    const body = p.source==="git"
+      ? {source:"github", repo:p.repo||p.name, name:p.name}
+      : {source:"npm", name:p.name};
+    const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    const d = await r.json().catch(()=>({}));
+    if (d.ok){ installed.add(p.name); save("dsh-installed", installed); toast("✓ 已安装 " + p.name); buildTabbar(); render(); }
+    else toast("✗ 安装失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
+  } catch(e){ toast("✗ 安装失败：" + e.message); }
+  if (btn){ btn.textContent = old; btn.disabled = false; }
+}
+async function hostUninstall(name){
+  if (!confirm("确认从 DSH 卸载「" + name + "」？")) return;
+  try {
+    const r = await fetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+    const d = await r.json().catch(()=>({}));
+    if (d.ok){ installed.delete(name); save("dsh-installed", installed); toast("✓ 已卸载 " + name); buildTabbar(); render(); }
+    else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
+  } catch(e){ toast("✗ 卸载失败：" + e.message); }
+}
+async function hostUpdateAll(upd){
+  let ok = 0, fail = 0;
+  for (let i=0;i<upd.length;i++){
+    const p = upd[i];
+    toast(`正在更新 ${i+1}/${upd.length}：${p.name}…`);
+    try {
+      const body = p.source==="git" ? {source:"github", repo:p.repo||p.name} : {source:"npm", name:p.name};
+      const r = await fetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+      const d = await r.json().catch(()=>({}));
+      if (d.ok) ok++; else fail++;
+    } catch(e){ fail++; }
+  }
+  toast(ok>0 ? `✓ 更新完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部更新失败");
+  buildTabbar(); render();
+}
+async function hostInstallAll(qlist){
+  let ok = 0, fail = 0;
+  for (let i=0;i<qlist.length;i++){
+    const p = qlist[i];
+    toast(`正在安装 ${i+1}/${qlist.length}：${p.name}…`);
+    try {
+      const body = p.source==="git" ? {source:"github", repo:p.repo||p.name} : {source:"npm", name:p.name};
+      const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+      const d = await r.json().catch(()=>({}));
+      if (d.ok){ ok++; installed.add(p.name); queue.delete(p.name); }
+      else fail++;
+    } catch(e){ fail++; }
+  }
+  save("dsh-installed", installed); save("dsh-queue", queue);
+  toast(ok>0 ? `✓ 安装完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部安装失败");
+  buildTabbar(); render(); renderDock();
+}
+
 function save(key, set){ localStorage.setItem(key, JSON.stringify([...set])); }
 function toast(msg){ const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 1800); }
 function fmtN(n){
@@ -487,6 +559,7 @@ async function load(){
   const loading = document.getElementById("loading");
   loading.style.display = "block";
   try {
+    await probeHost();
     const r = await fetch("data/plugins.json");
     if (!r.ok) throw new Error("HTTP " + r.status);
     DATA = await r.json();
@@ -495,11 +568,17 @@ async function load(){
     document.getElementById("st-ok").textContent = DATA.installable;
     document.getElementById("st-new").textContent = seven;
     document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
-    const updAll = DATA.plugins.filter(p=>p.hasUpdate).length;
+    const updAll = HOST
+      ? DATA.plugins.filter(p=>p.hasUpdate && installed.has(p.name)).length
+      : DATA.plugins.filter(p=>p.hasUpdate).length;
     document.getElementById("st-upd2").textContent = updAll;
     document.getElementById("btn-allupd").onclick = copyAllUpdates;
     const base = location.pathname.replace(/[^/]*$/,"");
     document.getElementById("idx-url").textContent = location.origin + base + "index.json";
+    if (HOST){
+      document.getElementById("idx-url").textContent = "宿主模式 · profile=" + esc(HOST.profile) + " · 数据经本插件代理（每日与线上同步）";
+      document.getElementById("cp-idx").style.display = "none";
+    }
     loading.style.display = "none";
     buildTabbar(); render();
   } catch(e){
@@ -752,11 +831,22 @@ function draw(list){
   document.querySelectorAll(".install-btn:not(.pending)").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     const p = list[+b.dataset.inst];
-    if (p && p.install) copyText(p.install, b, "✓ 已复制");
+    if (!p) return;
+    if (HOST){ hostInstall(p, b); return; }
+    if (p.install) copyText(p.install, b, "✓ 已复制");
   });
   document.querySelectorAll(".op").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     const n = b.dataset.n, op = b.dataset.op;
+    if (op==="installed" && HOST){
+      if (installed.has(n)) hostUninstall(n);
+      else {
+        const p = DATA.plugins.find(x=>x.name===n);
+        if (p) hostInstall(p, b);
+        else { installed.add(n); save("dsh-installed", installed); toast("已标记已安装"); buildTabbar(); render(); }
+      }
+      return;
+    }
     const set = {fav:favs, installed:installed, blocked:blocked, queue:queue}[op];
     const key = {"fav":"dsh-favs","installed":"dsh-installed","blocked":"dsh-blocked","queue":"dsh-queue"}[op];
     if (set.has(n)){ set.delete(n); toast(op==="blocked"?"已取消屏蔽":op==="queue"?"已移出待装":"已取消"); }
@@ -848,8 +938,13 @@ function openModalByPlugin(p){
   setDesc(p);
   const inst = document.getElementById("m-install");
   if (p.installable && p.install){
-    inst.innerHTML = `<div class="install-box"><code>${esc(p.install)}</code><button id="cp">复制</button></div>`;
-    document.getElementById("cp").onclick = e=>copyText(p.install, e.target, "已复制");
+    inst.innerHTML = HOST
+      ? `<div class="install-box"><code style="font-size:12px">${esc(p.install)}</code><button id="cp">${installed.has(p.name)?"更新":"安装"}</button></div>`
+      : `<div class="install-box"><code>${esc(p.install)}</code><button id="cp">复制</button></div>`;
+    document.getElementById("cp").onclick = e=>{
+      if (HOST){ hostInstall(p, e.target); return; }
+      copyText(p.install, e.target, "已复制");
+    };
   } else {
     inst.innerHTML = `<div class="no-install">该插件为 Git 来源，安装凭据（commit）正由每日增量管道补齐，补齐后即可一键安装。可先前往 GitHub 仓库查看。</div>`;
   }
@@ -892,12 +987,14 @@ function copyAllQueue(e){
   e.stopPropagation();
   const qlist = DATA.plugins.filter(p=>queue.has(p.name) && p.install);
   if (!qlist.length){ toast("待装清单为空"); return; }
+  if (HOST){ hostInstallAll(qlist); return; }
   const all = qlist.map(p=>p.install).join("\n");
   navigator.clipboard.writeText(all).then(()=>toast("已复制 " + qlist.length + " 条安装命令 ✓")).catch(()=>toast("复制失败"));
 }
 function copyAllUpdates(){
-  const upd = DATA.plugins.filter(p=>p.hasUpdate);
-  if (!upd.length){ toast("当前没有检测到有新版本的插件"); return; }
+  const upd = DATA.plugins.filter(p=>p.hasUpdate && installed.has(p.name));
+  if (!upd.length){ toast("已安装的插件中没有检测到有新版本的"); return; }
+  if (HOST){ hostUpdateAll(upd); return; }
   const cmds = upd.map(p=> p.source==="npm" ? `dsh plugin add ${p.name}` : `dsh plugin add github:${p.repo}`);
   const text = "# DSH 插件更新清单（共 " + upd.length + " 个：npm 源重装 latest，git 源重装默认分支最新提交）\n" + cmds.join("\n");
   navigator.clipboard.writeText(text).then(()=>toast("已复制 " + upd.length + " 条更新命令 ✓")).catch(()=>toast("复制失败，请手动复制"));
@@ -1022,12 +1119,13 @@ function renderAdvanced(){
       <div class="kv"><span>屏蔽</span><b>${blocked.size}</b></div>
       <div class="kv"><span>待装清单</span><b>${queue.size}</b></div>
       <div class="kv"><span>我的 DSH 版本（兼容过滤）</span><b>${esc(state.dshVer)||"未设置"}</b></div>
+      ${HOST?`<div class="kv"><span>宿主 profile</span><b style="color:var(--ok)">${esc(HOST.profile)} · 真实已装 ${installed.size} 个</b></div>`:""}
       <div class="act">
-        <button class="btn" id="btn-export">⬇ 导出备份 JSON</button>
-        <button class="btn" id="btn-import">⬆ 导入备份</button>
+        <button class="btn" id="btn-export">${HOST?"⬇ 导出 DSH 配置备份":"⬇ 导出备份 JSON"}</button>
+        <button class="btn" id="btn-import" ${HOST?'style="display:none"':""}>⬆ 导入备份</button>
         <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
-      <div class="desc">导出收藏/已装/屏蔽/待装配置，换浏览器或重装后可导入恢复。</div>
+      <div class="desc">${HOST?"导出本机 DSH profile 的已装插件清单与 cordis 补丁配置（JSON），可用于迁移/恢复。":"导出收藏/已装/屏蔽/待装配置，换浏览器或重装后可导入恢复。"}</div>
     </div>
     <div class="acard">
       <h4>ℹ 关于</h4>
@@ -1036,10 +1134,14 @@ function renderAdvanced(){
       <div class="kv"><span>判定标准</span><b>package.json 的 dsh 字段</b></div>
       <div class="kv"><span>构建时间</span><b>${esc(DATA.updated||"-")}</b></div>
       <div class="desc">
-        本站是<b>目录站</b>，无法读取你本机 DSH 的安装状态。<br>
+        ${HOST
+          ? `当前为<b>宿主模式</b>（dsh-store-market 插件，profile=${esc(HOST.profile)}）：<br>
+             · 安装/卸载/更新通过 <code>dsh plugin</code> 真实执行；「已安装」页读取本机真实状态；<br>
+             · 「备份」导出本机 DSH profile 配置；「诊断」检查 dsh CLI / profile / 数据源连通性。<br>`
+          : `本站是<b>目录站</b>，无法读取你本机 DSH 的安装状态。<br>`}
         · 「🔄 有新版本」= 与本站上次收录相比有新版/新提交发布，最近 7 天内管道会自动追平；<br>
-        · 真实的一键安装、全部更新、下载进度条、重启提醒、导出日志、打开配置文件、任务面板、评论计数，均为<b>宿主内 dsh-market</b> 插件的能力；<br>
-        · 本站用「手动标记已装 + 待装清单 + 复制安装命令」替代；git 来源在 DSH 中安装可能需要 allowBuilds，建议锁定 commit。
+        · 静态站用「手动标记已装 + 待装清单 + 复制安装命令」替代；安装 <code>dsh-store-market</code> 插件后在 DSH 设置页进入商店即可获得真实一键安装/全部更新/备份/诊断；<br>
+        · git 来源在 DSH 中安装可能需要 allowBuilds，建议锁定 commit。
       </div>
     </div>
     <div class="acard">
@@ -1067,6 +1169,18 @@ function renderAdvanced(){
 async function runDiag(){
   const el = document.getElementById("diag-idx");
   el.textContent = "检查中…";
+  if (HOST){
+    try {
+      const r = await fetch("api/diagnose", {cache:"no-store"});
+      const d = await r.json().catch(()=>({}));
+      if (d.dsh && d.dsh.ok){
+        el.innerHTML = `<span style="color:var(--ok)">✓ dsh ${esc((d.dsh.output||"").slice(0,30))}</span> · profile=${esc(d.profile)} · 已装 ${d.installedCount} 个 · 数据源 ${d.dataSource.reachable?"✓":"✗"} ${esc(d.dataSource.url||"")}`;
+      } else {
+        el.innerHTML = `<span style="color:var(--danger)">✗ dsh CLI 不可用：${esc((d.dsh&&d.dsh.output)||"检查失败")}</span>`;
+      }
+    } catch(e){ el.innerHTML = `<span style="color:var(--danger)">✗ ${esc(e.message)}</span>`; }
+    return;
+  }
   const idxUrl = document.getElementById("idx-url").textContent;
   try {
     const r = await fetch(idxUrl, {method:"HEAD"});
@@ -1077,6 +1191,14 @@ async function runDiag(){
   }
 }
 function exportBackup(){
+  if (HOST){
+    const a = document.createElement("a");
+    a.href = "api/backup";
+    a.download = "dsh-profile-" + HOST.profile + "-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    toast("正在导出 DSH 配置文件备份 ✓");
+    return;
+  }
   const data = { app:"dsh-store", version:1, exported:new Date().toISOString(),
     favs:[...favs], installed:[...installed], blocked:[...blocked], queue:[...queue],
     dshVer: state.dshVer };
