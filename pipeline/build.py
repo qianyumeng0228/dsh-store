@@ -20,17 +20,25 @@ from db import ensure_schema, load_icon_maps
 NPM_REGISTRY = "https://registry.npmjs.org"
 
 
-def http_get_json(url, timeout=20, retries=2):
+def http_get_json(url, timeout=25, retries=4):
+    """带指数退避重试（429/5xx/超时/连接错误）；404 直接抛 HTTPError 由调用方处理。"""
     last = None
     for i in range(retries + 1):
         try:
             req = Request(url, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
             with urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read().decode("utf-8"))
+        except HTTPError as e:
+            last = e
+            if e.code == 404:
+                raise
+            wait = 2 ** i
+            if e.code == 429:
+                wait = max(wait, 5)
+            time.sleep(wait)
         except Exception as e:
             last = e
-            if i < retries:
-                time.sleep(1.5 * (i + 1))
+            time.sleep(2 ** i)
     raise last
 
 
@@ -122,7 +130,7 @@ def main():
     print(f"[build] npm 插件 {len(npm_rows)} 个，待补版本 {len(need)} 个")
     if need:
         done = 0
-        with ThreadPoolExecutor(max_workers=16) as ex:
+        with ThreadPoolExecutor(max_workers=8) as ex:
             futs = {ex.submit(npm_latest, r["npm"]): r for r in need}
             for fut in as_completed(futs):
                 r = futs[fut]

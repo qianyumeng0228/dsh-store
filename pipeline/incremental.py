@@ -261,20 +261,43 @@ def _days_ago(n):
     return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
 
 
+def _registry_get_json(url, timeout=25, retries=4):
+    """registry 请求，带指数退避重试（429/5xx/超时/连接错误都重试）。"""
+    last = None
+    for i in range(retries + 1):
+        try:
+            req = Request(url, headers={"User-Agent": "dsh-store/0.1",
+                                        "Accept": "application/json"})
+            with urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except HTTPError as e:
+            last = e
+            if e.code == 404:
+                return None  # 包不存在，无需重试
+            wait = 2 ** i
+            if e.code == 429:
+                wait = max(wait, 5)  # 限流多等
+            time.sleep(wait)
+        except Exception as e:
+            last = e
+            time.sleep(2 ** i)
+    raise last
+
+
 def npm_latest_full(pkg: str):
     """registry.npmjs.org/{pkg}/latest。
-    返回 dict {latest, repo, engines_dsh}；404 返回 {latest: None}；网络失败返回 None。"""
+    返回 dict {latest, repo, engines_dsh}；404 返回 {latest: None}；重试耗尽返回 None。"""
     url = f"{NPM_REGISTRY}/{urllib.parse.quote(pkg, safe='@/')}/latest"
     try:
-        req = Request(url, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
-        with urlopen(req, timeout=20) as r:
-            data = json.loads(r.read().decode("utf-8"))
+        data = _registry_get_json(url)
     except HTTPError as e:
         if e.code == 404:
             return {"latest": None, "repo": "", "engines_dsh": None}
         return None
     except Exception:
         return None
+    if not data:
+        return {"latest": None, "repo": "", "engines_dsh": None}
     repo_url = ""
     repo_field = data.get("repository")
     if isinstance(repo_field, dict):
@@ -303,7 +326,7 @@ def updates_npm(conn):
 
     results = []
     fails = 0
-    with ThreadPoolExecutor(max_workers=16) as ex:
+    with ThreadPoolExecutor(max_workers=8) as ex:
         futs = {ex.submit(npm_latest_full, npm): (name, npm) for name, npm in rows}
         done = 0
         for fut in as_completed(futs):
