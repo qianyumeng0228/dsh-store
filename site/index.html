@@ -420,10 +420,17 @@ function isInstalled(p){ return installed.has(p.name) || (!!p.repo && installedR
 
 /* ---------- 宿主模式（dsh-store-market 插件内运行时启用） ---------- */
 let HOST = null;
+/* 宿主 api 统一入口：带 x-dsh-store 自定义头，跨源页面会被预检挡住，
+   服务端再校验回环 Host，防 DNS rebinding。 */
+async function apiFetch(path, opts){
+  const o = Object.assign({cache:"no-store"}, opts||{});
+  o.headers = Object.assign({'x-dsh-store':'1'}, o.headers||{});
+  return fetch(path, o);
+}
 /* 宿主模式：本机已装状态以宿主 API 为准，任何增删后重新拉取 */
 async function refreshInstalled(){
   try {
-    const r = await fetch("api/installed", {cache:"no-store"});
+    const r = await apiFetch("api/installed");
     if (!r.ok) return;
     const d = await r.json();
     installed = new Set(d.installed||[]);
@@ -433,7 +440,7 @@ async function refreshInstalled(){
 }
 async function probeHost(){
   try {
-    const r = await fetch("api/capabilities", {cache:"no-store"});
+    const r = await apiFetch("api/capabilities");
     if (!r.ok) return;
     HOST = await r.json();
     await refreshInstalled();
@@ -454,7 +461,7 @@ async function hostInstall(p, btn){
   const old = btn ? btn.textContent : "";
   if (btn){ btn.textContent = "安装中…"; btn.disabled = true; }
   try {
-    const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
+    const r = await apiFetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
     const d = await r.json().catch(()=>({}));
     if (d.ok){ await refreshInstalled(); toast("✓ 已安装 " + p.name); buildTabbar(); render(); }
     else toast("✗ 安装失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
@@ -464,7 +471,7 @@ async function hostInstall(p, btn){
 async function hostUninstall(name){
   if (!confirm("确认从 DSH 卸载「" + name + "」？")) return;
   try {
-    const r = await fetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+    const r = await apiFetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
     const d = await r.json().catch(()=>({}));
     if (d.ok){ await refreshInstalled(); toast("✓ 已卸载 " + name); buildTabbar(); render(); }
     else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
@@ -476,7 +483,7 @@ async function hostUpdateAll(upd){
     const p = upd[i];
     toast(`正在更新 ${i+1}/${upd.length}：${p.name}…`);
     try {
-      const r = await fetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
+      const r = await apiFetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
       const d = await r.json().catch(()=>({}));
       if (d.ok) ok++; else fail++;
     } catch(e){ fail++; }
@@ -490,7 +497,7 @@ async function hostInstallAll(qlist){
     const p = qlist[i];
     toast(`正在安装 ${i+1}/${qlist.length}：${p.name}…`);
     try {
-      const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
+      const r = await apiFetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
       const d = await r.json().catch(()=>({}));
       if (d.ok){ ok++; queue.delete(p.name); }
       else fail++;
@@ -1193,7 +1200,7 @@ async function runDiag(){
   el.textContent = "检查中…";
   if (HOST){
     try {
-      const r = await fetch("api/diagnose", {cache:"no-store"});
+      const r = await apiFetch("api/diagnose");
       const d = await r.json().catch(()=>({}));
       if (d.dsh && d.dsh.ok){
         el.innerHTML = `<span style="color:var(--ok)">✓ dsh ${esc((d.dsh.output||"").slice(0,30))}</span> · profile=${esc(d.profile)} · 已装 ${d.installedCount} 个 · 数据源 ${d.dataSource.reachable?"✓":"✗"} ${esc(d.dataSource.url||"")}`;
@@ -1214,11 +1221,17 @@ async function runDiag(){
 }
 function exportBackup(){
   if (HOST){
-    const a = document.createElement("a");
-    a.href = "api/backup";
-    a.download = "dsh-profile-" + HOST.profile + "-" + new Date().toISOString().slice(0,10) + ".json";
-    document.body.appendChild(a); a.click(); a.remove();
-    toast("正在导出 DSH 配置文件备份 ✓");
+    // 备份走 apiFetch：导航式 <a href> 带不了自定义头，会被服务端守卫拒掉
+    apiFetch("api/backup").then(async (r)=>{
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "dsh-profile-" + HOST.profile + "-" + new Date().toISOString().slice(0,10) + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast("已导出 DSH 配置文件备份 ✓");
+    }).catch((e)=>toast("导出失败：" + e.message));
     return;
   }
   const data = { app:"dsh-store", version:1, exported:new Date().toISOString(),
