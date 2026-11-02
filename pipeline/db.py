@@ -22,12 +22,10 @@ PLUGIN_NEW_COLS = {
 
 
 def ensure_schema(conn):
-    """幂等：缺列补列，缺表建表。"""
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(plugins)")]
-    for col, typ in PLUGIN_NEW_COLS.items():
-        if col not in cols:
-            conn.execute(f"ALTER TABLE plugins ADD COLUMN {col} {typ}")
-            cols.append(col)
+    """幂等：缺表建表，缺列补列。
+
+    plugins 表还不存在时（空库首跑）只建自己的两张附表并返回，
+    主表由调用方 seed.py 建好后再补列。"""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS npm_meta (
             pkg TEXT PRIMARY KEY, latest TEXT, latest_since TEXT, checked TEXT
@@ -38,6 +36,16 @@ def ensure_schema(conn):
             repo TEXT PRIMARY KEY, icon_path TEXT, checked TEXT
         )
     """)
+    has_plugins = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='plugins'").fetchone()
+    if not has_plugins:
+        conn.commit()
+        return
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(plugins)")]
+    for col, typ in PLUGIN_NEW_COLS.items():
+        if col not in cols:
+            conn.execute(f"ALTER TABLE plugins ADD COLUMN {col} {typ}")
+            cols.append(col)
     conn.commit()
 
 

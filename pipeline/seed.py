@@ -83,8 +83,6 @@ def main():
 
     conn = sqlite3.connect(config.DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
-    from db import ensure_schema
-    ensure_schema(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS plugins (
             name            TEXT PRIMARY KEY,
@@ -116,6 +114,9 @@ def main():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON plugins(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cat ON plugins(category_key)")
+    # 增量列与附表要在主表建好之后再补
+    from db import ensure_schema
+    ensure_schema(conn)
 
     COLS = ("name", "repo", "path", "description", "category", "official", "added",
             "last_verified", "verified_against", "status", "evidence", "npm", "stars",

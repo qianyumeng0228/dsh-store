@@ -39,6 +39,7 @@ jobs:
           key: dsh-store-db-v1-${{ github.run_id }}
           restore-keys: |
             dsh-store-db-v1-
+            dsh-store-db-v1
 
       - name: Fetch icon source indexes
         run: |
