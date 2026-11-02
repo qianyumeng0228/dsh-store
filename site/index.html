@@ -415,8 +415,16 @@ let installed = new Set(JSON.parse(localStorage.getItem("dsh-installed")||"[]"))
 let blocked = new Set(JSON.parse(localStorage.getItem("dsh-blocked")||"[]"));
 let queue = new Set(JSON.parse(localStorage.getItem("dsh-queue")||"[]"));
 let installedRepos = new Set();   // 宿主模式：本机已装 git 插件的 owner/repo（小写）
+let installedDetails = [];        // 宿主模式：本机依赖明细，卸载时要按真实依赖键来
 /* 目录里的展示名对 git 插件可能带 owner- 前缀，本机依赖键却是包名，故两个都要比 */
 function isInstalled(p){ return installed.has(p.name) || (!!p.repo && installedRepos.has(String(p.repo).toLowerCase())); }
+/* 卸载要用本机真实依赖键：git 插件装进 package.json 的键是它自己的包名，
+   与目录展示名（仓库末段，或撞名时带 owner- 前缀）经常不一致 */
+function depKeyOf(p){
+  const repo = p && p.repo ? String(p.repo).toLowerCase() : "";
+  const d = installedDetails.find(x => x && (x.name === p.name || (repo && x.repo && String(x.repo).toLowerCase() === repo)));
+  return d ? d.name : (p && p.name);
+}
 
 /* ---------- 宿主模式（dsh-store-market 插件内运行时启用） ---------- */
 let HOST = null;
@@ -434,7 +442,8 @@ async function refreshInstalled(){
     if (!r.ok) return;
     const d = await r.json();
     installed = new Set(d.installed||[]);
-    installedRepos = new Set((d.installedDetails||[]).filter(e=>e && e.repo)
+    installedDetails = Array.isArray(d.installedDetails) ? d.installedDetails : [];
+    installedRepos = new Set(installedDetails.filter(e=>e && e.repo)
       .map(e=>String(e.repo).toLowerCase()));
   } catch(e){ /* 保持上一次结果 */ }
 }
@@ -468,12 +477,14 @@ async function hostInstall(p, btn){
   } catch(e){ toast("✗ 安装失败：" + e.message); }
   if (btn){ btn.textContent = old; btn.disabled = false; }
 }
-async function hostUninstall(name){
-  if (!confirm("确认从 DSH 卸载「" + name + "」？")) return;
+async function hostUninstall(p){
+  const key = depKeyOf(p);
+  const shown = (p && p.name) || key;
+  if (!confirm("确认从 DSH 卸载「" + shown + "」？" + (key !== shown ? "（本机依赖键 " + key + "）" : ""))) return;
   try {
-    const r = await apiFetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
+    const r = await apiFetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:key})});
     const d = await r.json().catch(()=>({}));
-    if (d.ok){ await refreshInstalled(); toast("✓ 已卸载 " + name); buildTabbar(); render(); }
+    if (d.ok){ await refreshInstalled(); toast("✓ 已卸载 " + shown); buildTabbar(); render(); }
     else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
   } catch(e){ toast("✗ 卸载失败：" + e.message); }
 }
@@ -518,17 +529,20 @@ function fmtN(n){
 }
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-/* ---------- semver 轻量解析（支持 >=, <=, >, <, =, 空格组合, 预发布） ---------- */
+/* ---------- semver 轻量解析（支持 || 并集、^ ~、>= <= > < =、预发布） ---------- */
 function parseVer(v){
   if (!v) return null;
-  v = String(v).trim().replace(/^v/, "");
+  v = String(v).trim().replace(/^v/, "").split("+")[0];   // 丢掉 build 元数据
   const dashIdx = v.indexOf("-");
   const main = dashIdx >= 0 ? v.slice(0, dashIdx) : v;
   const preRaw = dashIdx >= 0 ? v.slice(dashIdx+1) : "";
   const parts = main.split(".");
-  const maj = parseInt(parts[0]||"0", 10)||0;
-  const min = parseInt(parts[1]||"0", 10)||0;
-  const pat = parseInt(parts[2]||"0", 10)||0;
+  /* 认不出的写法（含 1.x 这类通配）返回 null，由调用方按"不隐藏"处理。
+     早先这里把 NaN 当成 0，"weird" 会变成 0.0.0 从而误隐藏插件。 */
+  if (!parts.length || parts.some((x) => x === "" || !/^\d+$/.test(x))) return null;
+  const maj = parseInt(parts[0], 10);
+  const min = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+  const pat = parts.length > 2 ? parseInt(parts[2], 10) : 0;
   let pre = [];
   if (preRaw){
     pre = preRaw.split(".").map(x=> /^\d+$/.test(x) ? {n:parseInt(x,10)} : {s:x});
@@ -564,18 +578,32 @@ function matchRange(range, verStr){
   if (!range) return true;            // 未声明适配 = 不参与过滤
   const v = parseVer(verStr);
   if (!v) return true;                // 用户版本无法解析 = 不过滤
-  const parts = String(range).trim().split(/\s+/);
-  for (const part of parts){
-    const m = part.match(/^(>=|<=|>|<|=)?\s*(.+)$/);
-    if (!m) continue;
-    const op = m[1] || "=";
-    const c = parseVer(m[2]);
-    if (!c) continue;
-    const r = cmpVer(v, c);
-    const ok = op===">=" ? r>=0 : op==="<=" ? r<=0 : op===">" ? r>0 : op==="<" ? r<0 : r===0;
-    if (!ok) return false;
+  const R = String(range).trim();
+  if (!R || R === "*") return true;
+  /* 真实 engines.dsh 里最常见的是 "a || b || c" 并集与 "^x.y.z"，
+     早先只按空格切，"||" 会被当成一个版本号比出 false，导致本来兼容的插件被隐藏。 */
+  return R.split("||").some((part)=>{
+    const toks = part.trim().split(/\s+/).filter(Boolean);
+    return toks.length === 0 || toks.every((t)=>testComparator(v, t));
+  });
+}
+function testComparator(v, tok){
+  const m = tok.match(/^(\^|~|>=|<=|>|<|=)?\s*(.+)$/);
+  if (!m) return true;                 // 认不出的写法一律放行，与"未声明不隐藏"同口径
+  const op = m[1] || "=";
+  const c = parseVer(m[2]);
+  if (!c) return true;
+  if (op === "^" || op === "~"){
+    if (cmpVer(v, c) < 0) return false;
+    const upper = op === "~"
+      ? {maj:c.maj, min:c.min+1, pat:0, pre:[]}
+      : (c.maj > 0 ? {maj:c.maj+1, min:0, pat:0, pre:[]}
+        : (c.min > 0 ? {maj:0, min:c.min+1, pat:0, pre:[]}
+          : {maj:0, min:0, pat:c.pat+1, pre:[]}));
+    return cmpVer(v, upper) < 0;
   }
-  return true;
+  const r = cmpVer(v, c);
+  return op===">=" ? r>=0 : op==="<=" ? r<=0 : op===">" ? r>0 : op==="<" ? r<0 : r===0;
 }
 function hashStr(s){
   let h = 0;
@@ -871,7 +899,7 @@ function draw(list){
     const n = b.dataset.n, op = b.dataset.op;
     if (op==="installed" && HOST){
       const p = DATA.plugins.find(x=>x.name===n);
-      if (p ? isInstalled(p) : installed.has(n)) hostUninstall(n);
+      if (p ? isInstalled(p) : installed.has(n)) hostUninstall(p || {name:n});
       else if (p) hostInstall(p, b);
       else { installed.add(n); save("dsh-installed", installed); toast("已标记已安装"); buildTabbar(); render(); }
       return;
@@ -1189,7 +1217,7 @@ function renderAdvanced(){
   document.getElementById("btn-reset").onclick = ()=>{
     if (confirm("确认重置全部本地数据（收藏/已装/屏蔽/待装/DSH 版本）？此操作不可恢复。")){
       ["dsh-favs","dsh-installed","dsh-blocked","dsh-queue","dsh-dshver","dsh-view"].forEach(k=>localStorage.removeItem(k));
-      favs.clear(); installed.clear(); installedRepos.clear(); blocked.clear(); queue.clear();
+      favs.clear(); installed.clear(); installedRepos.clear(); installedDetails = []; blocked.clear(); queue.clear();
       state.dshVer = ""; state.view = IN_FRAME?"card":"row"; syncViewBtns();
       buildTabbar(); renderAdvanced(); toast("已重置");
     }

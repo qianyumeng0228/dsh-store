@@ -41,11 +41,20 @@ jobs:
             dsh-store-db-v1-
             dsh-store-db-v1
 
+      # 图标次级源索引。curl -f 失败时可能留下 0 字节文件，而 db.load_icon_maps
+      # 只看 exists() 就不再重下，解析失败被吞 -> 整个图标源静默丢失。
+      # 因此先写 .tmp，校验能按 JSON 解析后才落位。
       - name: Fetch icon source indexes
         run: |
           mkdir -p data/raw
-          curl -fsSL --retry 2 --connect-timeout 20 -o data/raw/dshopen.json https://dshopen.org/index.json || echo "dshopen fetch failed (non-fatal)"
-          curl -fsSL --retry 2 --connect-timeout 20 -o data/raw/awesome-plugins.json https://awesome-dsh-plugin.com/plugins.json || echo "awesome fetch failed (non-fatal)"
+          fetch() {
+            curl -fsSL --retry 2 --connect-timeout 20 -o "$1.tmp" "$2" \
+              && python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$1.tmp" \
+              && mv "$1.tmp" "$1" \
+              || { rm -f "$1.tmp"; echo "$1 拉取或解析失败（非致命，跳过该图标源）"; }
+          }
+          fetch data/raw/dshopen.json https://dshopen.org/index.json
+          fetch data/raw/awesome-plugins.json https://awesome-dsh-plugin.com/plugins.json
 
       - name: Seed (dsh.works 种子导入)
         run: python pipeline/seed.py

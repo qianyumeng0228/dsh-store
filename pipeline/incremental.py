@@ -264,8 +264,9 @@ def _days_ago(n):
 
 
 def _registry_get_json(url, timeout=20, retries=2):
-    """registry 请求：官方源失败（429/5xx/超时/连接）自动降级 npmmirror 镜像，
-    每源在 retries+1 轮里各尝试一次；404 直接抛；全部失败抛最后异常。"""
+    """registry 请求：官方源失败（429/5xx/超时/连接/404）自动降级 npmmirror 镜像，
+    每源在 retries+1 轮里各尝试一次；全部失败抛最后异常。
+    404 也走镜像：单侧 registry 偶发 404 不该被判定成「包不存在」。"""
     mirror = url.replace(NPM_REGISTRY, NPM_MIRROR, 1) if url.startswith(NPM_REGISTRY) else None
     last = None
     for attempt in range(retries + 1):
@@ -275,11 +276,6 @@ def _registry_get_json(url, timeout=20, retries=2):
                                             "Accept": "application/json"})
                 with urlopen(req, timeout=timeout) as r:
                     return json.loads(r.read().decode("utf-8"))
-            except HTTPError as e:
-                last = e
-                if e.code == 404:
-                    raise
-                continue
             except Exception as e:
                 last = e
                 continue
@@ -300,7 +296,7 @@ def npm_latest_full(pkg: str):
         return None
     except Exception:
         return None
-    if not data:
+    if not data or not isinstance(data, dict):
         return {"latest": None, "repo": "", "engines_dsh": None}
     repo_url = ""
     repo_field = data.get("repository")
@@ -308,7 +304,10 @@ def npm_latest_full(pkg: str):
         repo_url = repo_field.get("url") or ""
     elif isinstance(repo_field, str):
         repo_url = repo_field
-    eng = (data.get("engines") or {}).get("dsh")
+    # engines 可能是字符串/列表等畸形值，直接 .get 会抛 AttributeError，
+    # 而它落在 fut.result() 的调用链上，会让整个 incremental 步骤失败、build 与部署都不跑
+    engines = data.get("engines")
+    eng = engines.get("dsh") if isinstance(engines, dict) else None
     return {"latest": data.get("version"),
             "repo": parse_github_repo(repo_url),
             "engines_dsh": eng}

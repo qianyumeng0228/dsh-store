@@ -9,9 +9,8 @@ import sqlite3
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -23,7 +22,8 @@ NPM_MIRROR = "https://registry.npmmirror.com"
 
 
 def http_get_json(url, timeout=20, retries=2):
-    """官方源失败（429/5xx/超时/连接）自动降级 npmmirror 镜像；404 抛 HTTPError。"""
+    """官方源失败（429/5xx/超时/连接/404）自动降级 npmmirror 镜像。
+    404 也要试镜像：单侧 registry 偶发 404 时不该直接判定包不存在。"""
     mirror = url.replace(NPM_REGISTRY, NPM_MIRROR, 1) if url.startswith(NPM_REGISTRY) else None
     last = None
     for i in range(retries + 1):
@@ -32,11 +32,6 @@ def http_get_json(url, timeout=20, retries=2):
                 req = Request(src, headers={"User-Agent": "dsh-store/0.1", "Accept": "application/json"})
                 with urlopen(req, timeout=timeout) as r:
                     return json.loads(r.read().decode("utf-8"))
-            except HTTPError as e:
-                last = e
-                if e.code == 404:
-                    raise
-                continue
             except Exception as e:
                 last = e
                 continue
@@ -49,10 +44,14 @@ def npm_latest(name: str):
     """返回 (version, engines_dsh) 或 None。"""
     try:
         data = http_get_json(f"{NPM_REGISTRY}/{name}/latest")
+        if not isinstance(data, dict):
+            return None
         ver = data.get("version")
         if not ver:
             return None
-        eng = (data.get("engines") or {}).get("dsh")
+        engines = data.get("engines")
+        # engines 可能是字符串/列表等畸形值；这里若抛异常会连版本号一起丢掉
+        eng = engines.get("dsh") if isinstance(engines, dict) else None
         return ver, eng
     except Exception:
         return None
@@ -109,6 +108,17 @@ def load_npm_meta(conn):
     return m
 
 
+def load_npm_meta_checked(conn):
+    """npm 包最近一次刷新日期，用于给「已确认 404」设时限。"""
+    m = {}
+    try:
+        for r in conn.execute("SELECT pkg, checked FROM npm_meta"):
+            m[r[0]] = r[1] or ""
+    except sqlite3.OperationalError:
+        pass
+    return m
+
+
 def load_icon_probe(conn):
     """repo -> 命中的图标相对路径映射（incremental.py --icons 维护）。"""
     m = {}
@@ -121,9 +131,10 @@ def load_icon_probe(conn):
 
 
 def row_pname(r):
-    """索引内的唯一展示名：npm 包已收录版本时用包名，否则用仓库名末段。"""
-    if r["install_source"] == "npm" and r["npm_version"]:
-        return r["npm"] or ""
+    """索引内的唯一展示名。npm 包名全局唯一，只要声明了包名就用它 —— 不看 npm_version
+    是否已补齐，否则「补上版本」那一天条目名会从仓库末段翻成包名，身份不稳定。"""
+    if r["install_source"] == "npm" and r["npm"]:
+        return r["npm"]
     repo = r["repo"] or ""
     return repo.split("/")[-1] if repo else (r["name"] or "")
 
@@ -144,11 +155,14 @@ def main():
         conn.execute("UPDATE plugins SET npm_version=? WHERE name=?",
                      (npm_meta_map[r["npm"]], r["name"]))
     conn.commit()
-    # npm_meta 里 latest 为空的包是 registry 确认过的 404，不再重试
-    retry = [r for r in need if r["npm"] not in npm_meta_map]
+    # npm_meta 里 latest 为空的包按 404 处理，但只跳过 30 天：
+    # registry 偶发 404 / 包重新上架时不该让条目永久失去版本号
+    npm_checked = load_npm_meta_checked(conn)
+    stale_404 = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    retry = [r for r in need if npm_checked.get(r["npm"], "") <= stale_404]
     print(f"[build] npm 插件 {len(npm_rows)} 个，待补版本 {len(need)} 个："
           f"npm_meta 直接补齐 {len(from_meta)} / 需请求 registry {len(retry)} / "
-          f"已确认 404 跳过 {len(need) - len(from_meta) - len(retry)}")
+          f"404 未满 30 天跳过 {len(need) - len(from_meta) - len(retry)}")
     if retry:
         done = 0
         with ThreadPoolExecutor(max_workers=8) as ex:
@@ -240,14 +254,18 @@ def main():
         installable = False
         src = None
         pname = row_pname(r)
-        name_from_repo = not (install_source == "npm" and npm_version)
+        name_from_repo = not (install_source == "npm" and npm)
         if install_source == "npm" and npm_version:
             installable = True
-            src = {"type": "npm"}
+            src = {"type": "npm", "registry": NPM_REGISTRY}
         elif git_commit:
             # git 源，或 npm 版本还没补上：先按 commit 装，补齐版本后升级为 npm
             installable = True
             src = {"type": "git", "url": f"https://github.com/{repo}", "commit": git_commit}
+            # monorepo 子目录：参考索引把 path 同时放进 source 与 repository.directory，
+            # 只写 directory 的话宿主会装到仓库根
+            if path:
+                src["path"] = path
         else:
             skipped_git_nocommit += 1
 
@@ -271,6 +289,9 @@ def main():
             ver_obj = {
                 "version": version,
                 "source": src,
+                # 参考索引 979/979 都带 engines（无要求时为 {}）；不写就等于把
+                # 宿主机侧的版本门槛整个丢掉，只剩网站自己在前端过滤
+                "engines": ({"dsh": dsh_str} if dsh_str else {}),
             }
             if ts:
                 ver_obj["publishTimestamp"] = ts
