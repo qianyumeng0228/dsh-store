@@ -9,27 +9,26 @@
 
 每次 push / 每天 03:17 UTC 由 GitHub Actions 自动执行：种子刷新 → git commit 补齐 → npm 版本/更新检测 → 图标探测 → topic 扫描 → 生成索引 → 发布 Pages，无需手动运维。
 
-## 当前数据（2026-11-02 实测线上 `data/plugins.json`）
+## 当前数据（2026-11-02 13:58 UTC 实测线上 `data/plugins.json`）
 
 | 指标 | 数值 |
 |---|---|
-| 索引收录（去重后输出） | 17,447 |
-| 候选（verified + plugin/bundle） | 20,883 |
-| 其中可一键安装 | 4,830（来源：npm 6,381 / git 11,066） |
+| 索引收录（去重后输出） | 25,987 |
+| 其中可一键安装 | 11,742（来源：npm 8,591 / git 17,396） |
 | 种子来源 | dsh.works `plugins.json`（21,928 条，每日刷新） |
-| 作者头像覆盖（真实 GitHub 头像） | 16,416（94.1%） |
-| 插件图标（dshopen + awesome 双源 + GitHub 路径探测） | 626 |
-| 有新版本标记 | 150 |
-| DSH 适配版本区间（engines.dsh） | 1,081 |
-| npm 近 30 天下载量已补齐 | 359 |
+| 作者头像覆盖（真实 GitHub 头像） | 19,231 |
+| 插件图标（dshopen + awesome 双源 + GitHub 路径探测） | 1,124 |
+| 有新版本标记 | 203 |
+| DSH 适配版本区间（engines.dsh） | 1,763 |
+| npm 近 30 天下载量已补齐 | 389 |
 | 判定标准 | dsh.works 逐条核验的 `package.json#dsh` 字段证据 + 自建 topic 扫描复核 |
 | 分类 | 17 个双语分类（工具与能力 / 记忆 / 界面增强 / 模型与账号接入 …） |
 
-> 上述数值低于本 README 早先记录的 17,799 / 6,637，原因不是插件变少，而是每日增量成果没有累积：
+> 本表此前长期停在 17,447 / 可装 4,830，低于 README 早先宣称的 17,799 / 6,637。原因不是插件变少，而是每日增量成果没有累积：
 > `actions/cache` 用了固定 key（同 key 缓存不可覆盖，命中后 post 步跳过上传），`store.db` 被冻结在首日快照，
-> 每轮补好的 git commit / npm 下载量 / 图标探测 / 新仓库扫描随运行结束一起丢弃。
+> 每轮补好的 git commit / npm 版本 / 下载量 / 图标探测 / 新仓库扫描随运行结束一起丢弃。
 > 另有一处 `build.py` 的 npm 镜像降级因 `HTTPError` 未导入而整段失效，导致收录版本号补不上、可装数被压低。
-> 两处均已修复，可装数与图标覆盖会随每日运行重新增长。
+> 两处已修复，上表就是修复后连续累积的结果（索引 +8.5k、可装 +6.9k、图标 626→1,124、engines.dsh 1,081→1,763）。
 
 ## 功能（对标 dsh-market 的可移植部分）
 
@@ -48,7 +47,7 @@ dsh-store/
 ├── pipeline/
 │   ├── db.py              # 主库 schema 迁移（幂等）+ repository URL 解析 + 图标源映射
 │   ├── seed.py            # 种子导入：dsh.works JSON → SQLite（清洗+中英拆分+分类）
-│   ├── incremental.py     # 增量：git commit 补齐 + npm 版本/更新检测 + 图标探测 + topic 扫描
+│   ├── incremental.py     # 增量：git commit 补齐 + git 版本号 + npm 更新检测 + 图标探测 + topic 扫描
 │   └── build.py           # SQLite → dist/index.json（format-1）+ 网站数据
 ├── site/index.html        # 网站源码（build 时合并进输出）
 ├── data/                  # raw/ 原始种子（gitignore）；store.db SQLite 主库（Actions 缓存持久化）
@@ -88,7 +87,7 @@ dsh plugin add github:<owner/repo>       # git 插件
 
 ```powershell
 python pipeline/seed.py                 # 种子刷新
-python pipeline/incremental.py --all    # 补 commit + npm 更新检测 + 图标探测 + 扫新仓库（本地无 token 时每轮 40 个）
+python pipeline/incremental.py --all    # 补 commit + git 版本号 + npm 更新检测 + 图标探测 + 扫新仓库（本地无 token 时每轮 40 个）
 python pipeline/incremental.py --updates --npm-batch 500 --git-batch 200   # 本地只想小范围试更新检测时
 python pipeline/build.py                # 生成索引与网站
 ```
@@ -109,7 +108,11 @@ python pipeline/build.py                # 生成索引与网站
 - [x] `http_get_json` 429 自动降级 npmmirror 并取到版本，404 抛 HTTPError（此前 NameError 被吞导致降级整段失效）
 - [x] 网站在浏览器实测：静态站（无宿主 API 时降级为复制命令、默认列表视图、视图选择持久化、屏蔽/收藏/待装/已装联动、顶部"全部更新"计数随标记实时变化）与宿主模式（已装识别含按 repo 匹配的 git 插件、安装/更新载荷、iframe 内只保留宿主一条滚动条）两条路径
 - [x] `deploy/deploy.ps1` 可执行（此前 `param([string]$Host)` 与 PowerShell 只读自动变量冲突，一运行即 VariableNotWritable）
-- [ ] git 插件 commit 全量补齐：缓存修复后每天 2,000 个开始真正累积（当前待补 13,015 个）
+- [x] git 条目真实版本号：`--gitver` 从锁定的 commit 读 `package.json#version`（含 monorepo 子目录），索引不再恒写占位 `0.0.0`；只在 commit 变化时重读
+- [ ] git 插件 commit 全量补齐：缓存修复后每天 2,000 个开始真正累积
+- [x] 差异追平与探测节流分列：`git_probed` 负责"7 天内不重复探测"，`git_checked` 只记差异起始日；追平改成一条纯 SQL（不花 API 配额）。此前两者挤在一列，无差异的高星仓库每轮立刻重新可选、占满 batch，长尾仓库永远轮不到
+- [x] `scan_new` 落库补全：bundle 识别（旧代码写的是 `"dsh.bundle" in data`，只匹配字面带点的键名，永远命中不了）、按 topics 映射 `category_key`（此前硬编码 `tools`）、把探测到的子目录写进 `path`、`INSERT OR IGNORE` 撞名不再计入新增数
+- [x] 索引字段对齐参考实现：`versions[].engines`（dshopen 979/979 都有）、npm `source.registry`（938/938 都有）、monorepo `source.path`
 - [ ] 图标 / 下载量 / npm engines.dsh 同理逐日累积（`NPM_UPDATE_BATCH=2000` ⇒ 7,073 个包约 3.5 天轮完一圈）
 
 ## 已知边界

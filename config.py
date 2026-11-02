@@ -37,8 +37,13 @@ GIT_COMMIT_BATCH_TOKEN = 2000
 # npm 下载量（近30天）单轮补齐上限（GitHub Actions runner 对 npm API 限流较严，用小批量防超时）
 NPM_DL_BATCH = 800
 
-# git 更新检测：每轮刷新 git_latest_commit 的仓库数（按 stars 降序，7 天内已探测的跳过）
-GIT_UPDATE_BATCH = 500
+# git 更新检测：每轮刷新 git_latest_commit 的仓库数（按 stars 降序轮转，7 天内已探测的跳过）。
+# 规模要和 7 天窗口配套：库内约 1.4 万个 git 仓库，500/轮 × 7 天 = 3,500 只能覆盖头部，
+# 长尾依旧饿死；2,000/轮 × 7 天 ≈ 全量转一圈。
+GIT_UPDATE_BATCH = 2000
+# git 插件真实版本号：从锁定的 commit 读 package.json#version（raw 请求，不吃 API 限额）。
+# 只在 commit 变化时重读，首轮需要把存量摊掉，故单独设批量。
+GIT_VERSION_BATCH = 2500
 # npm 更新检测：每轮刷新的包数（按 stars 降序轮转，7 天内已刷过的跳过）。
 # 全量一轮 7,000+ registry 请求，是 CI 耗时主因，分批后每天只刷到期的一轮。
 NPM_UPDATE_BATCH = 2000

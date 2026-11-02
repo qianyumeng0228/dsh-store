@@ -17,7 +17,12 @@ PLUGIN_NEW_COLS = {
     "npm_repo": "TEXT",          # npm 包解析出的 GitHub 仓库 owner/name（lowercase）
     "dsh_engines": "TEXT",       # npm engines.dsh 原始字符串
     "git_latest_commit": "TEXT",  # git 源仓库最新 commit sha
-    "git_checked": "TEXT",        # 差异开始日（YYYY-MM-DD），无已知差异时为空
+    "git_checked": "TEXT",       # 差异起始日（YYYY-MM-DD），无已知差异时为空
+    # 上次探测该仓库默认分支的日期：与 git_checked 分开，否则无差异的仓库会被立刻
+    # 重新排进 batch，高星无差异仓库长期占满名额、长尾仓库永远轮不到
+    "git_probed": "TEXT",
+    "git_version": "TEXT",       # 锁定 commit 上 package.json#version
+    "git_ver_commit": "TEXT",    # git_version 读自哪个 commit（commit 变了才重读）
 }
 
 

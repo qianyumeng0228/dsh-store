@@ -9,16 +9,21 @@
      同时解析 repository.url 存 npm_repo、engines.dsh 存 dsh_engines；
      latest 与收录版差异满 7 天则把 npm_version 追平为 latest。
      按 stars 降序轮转，每轮 --npm-batch 个（7 天内已刷过的跳过）。
-   - git：按 stars 降序批量刷新 git_latest_commit；git_checked 记录差异开始日，
-     差异满 7 天则把 git_commit 追平。
+   - git：先用一条 SQL 把满 7 天的已知差异追平（不花 API 配额），再按 stars 降序轮转
+     探测默认分支 HEAD，每轮 --git-batch 个，7 天内探测过的跳过（节流看 git_probed，
+     与差异计时 git_checked 分列，否则无差异的高星仓库每轮占满 batch、长尾饿死）。
 5. --icons：按 stars 降序批量探测仓库常见图标路径（raw.githubusercontent HEAD），
    命中存 icon_probe.icon_path，7 天内已探测的跳过。
-6. --all：commit-only + downloads + updates + icons + scan-new。
+6. --gitver：从**锁定的 commit** 读 package.json#version 存 git_version（raw 请求，
+   不占 API 限额）。git_ver_commit 记下读自哪个 commit，commit 没变不重读。
+   build 据此填索引里 git 条目的 version，不再恒为占位 0.0.0。
+7. --all：commit-only + downloads + updates + icons + gitver + scan-new。
 
 用法:
     python pipeline/incremental.py --commit-only
     python pipeline/incremental.py --scan-new
     python pipeline/incremental.py --updates --icons
+    python pipeline/incremental.py --gitver --gitver-batch 300
     python pipeline/incremental.py --all
 环境变量 GITHUB_TOKEN 可选（推荐提供，速度差两个数量级）。
 """
@@ -102,21 +107,30 @@ def repo_commit(repo: str):
 
 def probe_repo(repo: str):
     """探测仓库是否是 DSH 插件：找 package.json 的 dsh 字段。
-    返回 (evidence, npm) 或 (None, None)。按成本从低到高探测路径。"""
+    返回 (evidence, npm, subdir, is_bundle)；不是插件返回 (None, None, "", False)。
+    按成本从低到高探测路径。命中的子目录必须回传并落库，
+    否则 monorepo 会被装到仓库根（索引里 source.path 就靠它）。"""
     paths = ["package.json", "plugin/package.json", "dsh/package.json",
              "dsh-plugin/package.json", "packages/dsh-plugin/package.json"]
     for p in paths:
         data, _ = api_get(f"https://raw.githubusercontent.com/{repo}/HEAD/{p}")
         if not isinstance(data, dict):
             continue
-        if "dsh" in data or "dsh.bundle" in data:
-            ev = f"{p}#dsh"
+        subdir = p[: -len("package.json")].rstrip("/")
+        dsh = data.get("dsh")
+        # bundle 判定：dsh.bundle 存在。旧实现写的是 "dsh.bundle" in data，
+        # 那只匹配字面带点的键名，永远命中不了
+        is_bundle = (isinstance(dsh, dict) and "bundle" in dsh) or ("dsh.bundle" in data)
+        if dsh is not None or is_bundle:
+            ev = f"{p}#dsh" + ("bundle" if is_bundle else "")
             npm = data.get("name") if isinstance(data.get("name"), str) else None
-            return ev, npm
+            return ev, npm, subdir, is_bundle
         deps = data.get("dependencies") or data.get("peerDependencies") or {}
-        if deps.get("@deepseek-ai/dsh") or deps.get("@deepseek-ai/dsh-tools") or deps.get("@deepseek-ai/dsh-agent"):
-            return f"{p}#dependencies", data.get("name")
-    return None, None
+        if isinstance(deps, dict) and (deps.get("@deepseek-ai/dsh") or deps.get("@deepseek-ai/dsh-tools")
+                                       or deps.get("@deepseek-ai/dsh-agent")):
+            npm = data.get("name") if isinstance(data.get("name"), str) else None
+            return f"{p}#dependencies", npm, subdir, False
+    return None, None, "", False
 
 
 def fill_commits(conn, limit):
@@ -143,7 +157,7 @@ def fill_commits(conn, limit):
 
 def scan_new(conn, pages=3):
     """扫 topic:dsh-plugin 最近更新的仓库，新仓库入库。"""
-    added = 0
+    added = skipped = 0
     for page in range(1, pages + 1):
         q = urllib.parse.quote("topic:dsh-plugin")
         data, _ = api_get(
@@ -161,38 +175,51 @@ def scan_new(conn, pages=3):
             exists = conn.execute("SELECT 1 FROM plugins WHERE repo=?", (full,)).fetchone()
             if exists:
                 continue
-            ev, npm = probe_repo(full)
+            ev, npm, subdir, is_bundle = probe_repo(full)
             if not ev:
                 print(f"[scan] 跳过（非插件）: {full}")
                 continue
             desc = (it.get("description") or "")[:2000]
             has_cjk = bool(CJK_RE.search(desc))
-            cat = "plugin"
+            cat = "bundle" if is_bundle else "plugin"
             tags = ["dsh-plugin"]
             for t in (it.get("topics") or [])[:20]:
                 tags.append(str(t))
+            # 分类沿用 seed 的 tags -> category 映射，不再硬编码 tools
+            cat_key = config.DEFAULT_CATEGORY
+            for t in tags:
+                k = config.TAG_TO_CATEGORY.get(str(t).lower())
+                if k:
+                    cat_key = k
+                    break
             stars = int(it.get("stargazers_count") or 0)
             pushed = (it.get("pushed_at") or "")[:10]
             created = (it.get("created_at") or "")[:10]
-            conn.execute("""
+            cur = conn.execute("""
                 INSERT OR IGNORE INTO plugins
-                (name, repo, description, category, official, added, status, evidence,
+                (name, repo, path, description, category, official, added, status, evidence,
                  npm, stars, stars_updated, pushed_at, tags, title_en, title_zh,
                  desc_en, desc_zh, install_source, category_key, last_seen)
-                VALUES (?,?,?,?,0,?, 'verified', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'tools', ?)
+                VALUES (?,?,?,?,?,0,?, 'verified', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                full.split("/")[-1], full, desc, cat, created, ev, npm or None,
+                full.split("/")[-1], full, subdir, desc, cat, created, ev, npm or None,
                 stars, it.get("pushed_at") or "", pushed,
                 json.dumps(tags, ensure_ascii=False),
                 full.split("/")[-1].replace("dsh-", "").title(),
                 full.split("/")[-1], desc if not has_cjk else "", desc if has_cjk else "",
-                "npm" if npm else "git", it.get("pushed_at") or "",
+                "npm" if npm else "git", cat_key, it.get("pushed_at") or "",
             ))
-            added += 1
-            print(f"[scan] 新增: {full} (stars={stars}, source={'npm' if npm else 'git'})")
+            # INSERT OR IGNORE 撞 name 时静默不插，此前仍 added+=1 -> 日志虚高
+            if cur.rowcount:
+                added += 1
+                print(f"[scan] 新增: {full} (stars={stars}, source={'npm' if npm else 'git'}"
+                      f"{', bundle' if is_bundle else ''}{', path=' + subdir if subdir else ''})")
+            else:
+                skipped += 1
+                print(f"[scan] 撞名未入库: {full} -> {full.split('/')[-1]}")
         conn.commit()
         time.sleep(2)  # search API 限速
-    print(f"[scan] 新增 {added} 个")
+    print(f"[scan] 新增 {added} 个（另有 {skipped} 个因撞名未入库）")
     return added
 
 
@@ -400,54 +427,73 @@ def updates_npm(conn, batch):
 
 
 def updates_git(conn, batch):
-    """git 更新检测：批量刷新 git_latest_commit；差异满 7 天追平 git_commit。"""
+    """git 更新检测。两件事拆开做：
+
+    1) 追平（纯 SQL，不花 API 配额）：git_checked 记的是"首次看到差异"的日期，
+       满 7 天就把 git_commit 追平到已知的 git_latest_commit。
+    2) 探测（花 API）：按 stars 降序轮转刷新默认分支 HEAD，每轮 batch 个，
+       7 天内探测过的跳过 —— 节流靠 git_probed，不再复用 git_checked。
+       此前两个语义挤在 git_checked 一列上：无差异的仓库会被置空、立刻重新可选，
+       于是高星无差异仓库每轮占满 batch，长尾仓库永远轮不到。
+    """
     ensure_schema(conn)
     today = _today()
     cutoff_7 = _days_ago(7)
+
+    cur = conn.execute("""
+        UPDATE plugins SET git_commit=git_latest_commit, git_checked=''
+        WHERE install_source='git' AND git_checked!='' AND git_checked<=?
+          AND git_latest_commit IS NOT NULL AND git_latest_commit!=''
+          AND git_commit IS NOT NULL AND git_commit!=git_latest_commit
+    """, (cutoff_7,))
+    n_catchup = cur.rowcount or 0
+
     rows = conn.execute("""
         SELECT name, repo, git_commit FROM plugins
         WHERE install_source='git' AND repo IS NOT NULL AND repo!=''
-          AND (git_checked IS NULL OR git_checked='' OR git_checked <= ?)
+          AND (git_probed IS NULL OR git_probed<=?)
         ORDER BY stars DESC LIMIT ?
     """, (cutoff_7, batch)).fetchall()
-    print(f"[updates-git] 待刷新 {len(rows)} 个仓库（batch={batch}）")
+    print(f"[updates-git] 待探测 {len(rows)} 个仓库（batch={batch}，7 天轮转）")
     if not rows:
-        return 0
+        conn.commit()
+        print(f"[updates-git] 完成: 追平 {n_catchup} / 新差异 0 / 无差异 0")
+        return n_catchup
 
     def work(item):
         nm, rp, gc = item
         sha = repo_commit(rp)
         return nm, rp, gc, sha
 
-    n_newdiff = n_catchup = n_nodiff = 0
+    n_newdiff = n_nodiff = n_failed = 0
     with ThreadPoolExecutor(max_workers=8) as ex:
         futs = {ex.submit(work, r): r for r in rows}
         done = 0
         for fut in as_completed(futs):
             nm, rp, gc, sha = fut.result()
             done += 1
+            # 无论成败都记探测日：失败/404 的仓库下轮起 7 天内不再重复消耗配额
+            conn.execute("UPDATE plugins SET git_probed=? WHERE name=?", (today, nm))
             if not sha:
+                n_failed += 1
                 continue
             if not gc:
                 conn.execute("UPDATE plugins SET git_latest_commit=? WHERE name=?", (sha, nm))
             elif sha != gc:
-                # 发现差异：git_checked 为空 -> 置今天；已满 7 天 -> 追平
                 old_checked = conn.execute(
                     "SELECT git_checked FROM plugins WHERE name=?", (nm,)).fetchone()
-                old_checked = old_checked[0] if old_checked else ""
+                old_checked = (old_checked[0] if old_checked else "") or ""
                 if not old_checked:
                     conn.execute(
                         "UPDATE plugins SET git_latest_commit=?, git_checked=? WHERE name=?",
                         (sha, today, nm))
                     n_newdiff += 1
-                elif old_checked <= cutoff_7:
-                    conn.execute(
-                        "UPDATE plugins SET git_latest_commit=?, git_commit=?, git_checked='' WHERE name=?",
-                        (sha, sha, nm))
-                    n_catchup += 1
-                # 差异未满 7 天的本轮已被 SQL 过滤掉，不会落到这里
+                else:
+                    # 差异计时已在跑：仍要把刚观测到的 sha 记下来，
+                    # 否则追平通道拿不到新值，要再等一轮 7 天才能追平
+                    conn.execute("UPDATE plugins SET git_latest_commit=? WHERE name=?", (sha, nm))
             else:
-                # 无差异：记录最新 commit，清空 git_checked
+                # 无差异：记录最新 commit，清空差异计时
                 conn.execute(
                     "UPDATE plugins SET git_latest_commit=?, git_checked='' WHERE name=?",
                     (sha, nm))
@@ -456,8 +502,56 @@ def updates_git(conn, batch):
                 conn.commit()
                 print(f"[updates-git] 进度 {done}/{len(rows)}")
     conn.commit()
-    print(f"[updates-git] 完成: 新差异 {n_newdiff} / 追平 {n_catchup} / 无差异 {n_nodiff}")
+    print(f"[updates-git] 完成: 追平 {n_catchup} / 新差异 {n_newdiff} / 无差异 {n_nodiff} / 探测失败 {n_failed}")
     return done
+
+
+def fill_git_versions(conn, limit):
+    """读 git 插件的真实版本号：从**锁定的那个 commit** 上取 package.json#version。
+    build 此前对 git 条目恒写占位 0.0.0（参考索引 41/41 都是真版本号），
+    宿主按版本判更新于是永远不会提示 git 插件可更新。
+    git_ver_commit 记下读自哪个 commit，commit 没变就不重读；读不到也记，避免每轮重复请求。
+    走 raw.githubusercontent，不消耗 API 限额。"""
+    ensure_schema(conn)
+    rows = conn.execute("""
+        SELECT name, repo, path, git_commit FROM plugins
+        WHERE git_commit IS NOT NULL AND git_commit!=''
+          AND repo IS NOT NULL AND repo!=''
+          AND (git_version IS NULL OR git_version=''
+               OR git_ver_commit IS NULL OR git_ver_commit!=git_commit)
+        ORDER BY stars DESC LIMIT ?
+    """, (limit,)).fetchall()
+    print(f"[gitver] 待读版本 {len(rows)} 个仓库（batch={limit}）")
+    if not rows:
+        return 0
+
+    def work(item):
+        name, repo, path, sha = item
+        rel = (path.strip("/") + "/") if path else ""
+        data, _ = api_get(f"https://raw.githubusercontent.com/{repo}/{sha}/{rel}package.json")
+        ver = data.get("version") if isinstance(data, dict) else None
+        return name, sha, (ver if isinstance(ver, str) else "")
+
+    ok = miss = 0
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futs = {ex.submit(work, r): r for r in rows}
+        done = 0
+        for fut in as_completed(futs):
+            name, sha, ver = fut.result()
+            done += 1
+            if ver:
+                conn.execute("UPDATE plugins SET git_version=?, git_ver_commit=? WHERE name=?",
+                             (ver, sha, name))
+                ok += 1
+            else:
+                conn.execute("UPDATE plugins SET git_ver_commit=? WHERE name=?", (sha, name))
+                miss += 1
+            if done % 500 == 0:
+                conn.commit()
+                print(f"[gitver] 进度 {done}/{len(rows)}，取到 {ok}")
+    conn.commit()
+    print(f"[gitver] 完成: 取到版本 {ok} / 无 version 字段或读不到 {miss}")
+    return ok
 
 
 # ------------------------------------------------------------------ icons ----
@@ -531,9 +625,12 @@ def main():
     ap.add_argument("--downloads", action="store_true")
     ap.add_argument("--updates", action="store_true", help="npm + git 更新检测")
     ap.add_argument("--icons", action="store_true", help="仓库图标路径探测")
+    ap.add_argument("--gitver", action="store_true", help="从锁定 commit 读 git 插件真实版本号")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--git-batch", type=int, default=config.GIT_UPDATE_BATCH,
                     help="git 更新检测每轮仓库数（默认 config.GIT_UPDATE_BATCH）")
+    ap.add_argument("--gitver-batch", type=int, default=config.GIT_VERSION_BATCH,
+                    help="git 版本号读取每轮仓库数（默认 config.GIT_VERSION_BATCH）")
     ap.add_argument("--npm-batch", type=int, default=config.NPM_UPDATE_BATCH,
                     help="npm 更新检测每轮包数（默认 config.NPM_UPDATE_BATCH）")
     ap.add_argument("--icon-batch", type=int, default=config.ICON_BATCH,
@@ -546,7 +643,11 @@ def main():
     git_pending = conn.execute(
         "SELECT COUNT(*) FROM plugins WHERE install_source='git' AND (git_commit IS NULL OR git_commit='')"
     ).fetchone()[0]
-    print(f"[incremental] 库内 git 待补 commit: {git_pending}")
+    ver_pending = conn.execute(
+        "SELECT COUNT(*) FROM plugins WHERE git_commit IS NOT NULL AND git_commit!='' "
+        "AND (git_version IS NULL OR git_version='' OR git_ver_commit IS NULL OR git_ver_commit!=git_commit)"
+    ).fetchone()[0]
+    print(f"[incremental] 库内 git 待补 commit: {git_pending} / 待读版本号: {ver_pending}")
 
     if args.commit_only or args.all:
         limit = config.GIT_COMMIT_BATCH_TOKEN if config.GITHUB_TOKEN else config.GIT_COMMIT_BATCH_NO_TOKEN
@@ -558,6 +659,8 @@ def main():
         updates_git(conn, args.git_batch)
     if args.icons or args.all:
         icons_probe(conn, args.icon_batch)
+    if args.gitver or args.all:
+        fill_git_versions(conn, args.gitver_batch)
     if args.scan_new or args.all:
         scan_new(conn)
     conn.close()

@@ -76,7 +76,7 @@ def fetch_rows(conn, statuses, categories):
         SELECT name, repo, path, title_en, title_zh, desc_en, desc_zh, tags, stars,
                install_source, npm, git_commit, npm_version, category_key, pushed_at,
                official, evidence, status, added, verified_against,
-               npm_repo, dsh_engines, git_latest_commit
+               npm_repo, dsh_engines, git_latest_commit, git_version
         FROM plugins
         WHERE status IN ({})
           AND category IN ({})
@@ -283,7 +283,12 @@ def main():
         # ---- format-1 条目 ----
         ver_obj = {}
         if installable:
-            version = npm_version if install_source == "npm" else "0.0.0"
+            # git 条目用锁定 commit 上读到的真实版本号（参考索引里 git 条目都是真版本，
+            # 恒写 0.0.0 会让宿主永远判不出可更新）；读不到才回落占位值
+            if src["type"] == "npm":
+                version = npm_version
+            else:
+                version = r["git_version"] or "0.0.0"
             ts = iso_to_ts(pushed_at) or iso_to_ts(
                 conn.execute("SELECT last_verified FROM plugins WHERE name=?", (r["name"],)).fetchone()[0])
             ver_obj = {
@@ -331,7 +336,7 @@ def main():
             "updated": pushed_at or "",
             "added": added,
             "official": bool(official),
-            "version": npm_version or "",
+            "version": npm_version or (r["git_version"] if install_source != "npm" else "") or "",
             "verified": r["verified_against"] or "",
             "downloads": downloads_map.get(npm, 0) if install_source == "npm" else 0,
             "author": author, "avatar": avatar, "icon": icon,
