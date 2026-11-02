@@ -83,6 +83,13 @@ def api_get(url, timeout=20):
         print(f"[api] 网络错误: {e.reason} ({url[:80]})")
         time.sleep(5)
         return None, None
+    except Exception as e:
+        # RemoteDisconnected / 连接重置这类不是 URLError 的子类，此前会一路冒泡
+        # 炸掉整个 incremental 步骤，导致 build 与 Pages 部署都不执行。
+        # 单个仓库本轮跳过即可：git_commit 仍为 NULL，下一轮会重新排到。
+        print(f"[api] 连接异常 {type(e).__name__}: {str(e)[:80]} ({url[:80]})")
+        time.sleep(2)
+        return None, None
 
 
 def repo_commit(repo: str):
