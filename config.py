@@ -39,6 +39,9 @@ NPM_DL_BATCH = 800
 
 # git 更新检测：每轮刷新 git_latest_commit 的仓库数（按 stars 降序，7 天内已探测的跳过）
 GIT_UPDATE_BATCH = 500
+# npm 更新检测：每轮刷新的包数（按 stars 降序轮转，7 天内已刷过的跳过）。
+# 全量一轮 7,000+ registry 请求，是 CI 耗时主因，分批后每天只刷到期的一轮。
+NPM_UPDATE_BATCH = 2000
 # 图标探测：每轮 HEAD 探测的仓库数（按 stars 降序，7 天内已探测的跳过）
 ICON_BATCH = 400
 

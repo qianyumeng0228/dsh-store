@@ -1,10 +1,12 @@
 # deploy.ps1 —— 把 dist/site 部署到 GCP（ssh 别名 gcp，/var/www/dsh-store）
 # 用法:
 #   .\deploy\deploy.ps1                      # 默认: rsync 到 gcp:/var/www/dsh-store
-#   .\deploy\deploy.ps1 -Host myhost         # 指定 ssh 别名
+#   .\deploy\deploy.ps1 -SshHost myhost      # 指定 ssh 别名
 #   .\deploy\deploy.ps1 -Domain dsh.example.com   # 顺带在远端写好 Caddyfile 并 reload
+# 注意：参数名不能叫 Host —— $Host 是 PowerShell 只读自动变量，param 里用会直接报
+# VariableNotWritable（"无法覆盖变量 Host"），脚本第一步就崩。
 param(
-    [string]$Host = "gcp",
+    [string]$SshHost = "gcp",
     [string]$Domain = "",
     [string]$RemoteDir = "/var/www/dsh-store"
 )
@@ -17,12 +19,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $Site "index.html"))) {
     throw "找不到站点产物: $Site —— 先运行 python pipeline/build.py"
 }
 
-Write-Host "==> 创建远端目录: ${Host}:${RemoteDir}"
-ssh $Host "mkdir -p $RemoteDir"
+Write-Host "==> 创建远端目录: ${SshHost}:${RemoteDir}"
+ssh $SshHost "mkdir -p $RemoteDir"
 
 Write-Host "==> 同步站点文件 (rsync，仅差异传输)"
 # 远端一般有 rsync; 若没有, 先 apt install rsync
-rsync -avz --delete "$Site/" "${Host}:${RemoteDir}/"
+rsync -avz --delete "$Site/" "${SshHost}:${RemoteDir}/"
 
 if ($Domain) {
     Write-Host "==> 写入 Caddyfile 并 reload"
@@ -41,8 +43,8 @@ $Domain {
 "@
     $tmp = Join-Path $env:TEMP "dsh-store-Caddyfile"
     [IO.File]::WriteAllText($tmp, $caddy + "`n", (New-Object Text.UTF8Encoding $false))
-    scp $tmp "${Host}:/tmp/dsh-store-Caddyfile"
-    ssh $Host "sudo sh -c 'cat /tmp/dsh-store-Caddyfile > /etc/caddy/Caddyfile.dsh-store && caddy validate --config /etc/caddy/Caddyfile.dsh-store && caddy reload --config /etc/caddy/Caddyfile' || echo 'Caddy reload 失败, 请手动检查'"
+    scp $tmp "${SshHost}:/tmp/dsh-store-Caddyfile"
+    ssh $SshHost "sudo sh -c 'cat /tmp/dsh-store-Caddyfile > /etc/caddy/Caddyfile.dsh-store && caddy validate --config /etc/caddy/Caddyfile.dsh-store && caddy reload --config /etc/caddy/Caddyfile' || echo 'Caddy reload 失败, 请手动检查'"
     Remove-Item $tmp -Force
 }
 
@@ -51,5 +53,5 @@ if ($Domain) {
     Write-Host "    索引源: https://$Domain/index.json"
     Write-Host "    网站:   https://$Domain/"
 } else {
-    Write-Host "    已同步到 ${Host}:${RemoteDir} (域名/Caddy 未配置)"
+    Write-Host "    已同步到 ${SshHost}:${RemoteDir} (域名/Caddy 未配置)"
 }

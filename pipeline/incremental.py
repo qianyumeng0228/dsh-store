@@ -8,6 +8,7 @@
    - npm：registry.npmjs.org/{pkg}/latest 刷新 npm_meta（latest/latest_since/checked），
      同时解析 repository.url 存 npm_repo、engines.dsh 存 dsh_engines；
      latest 与收录版差异满 7 天则把 npm_version 追平为 latest。
+     按 stars 降序轮转，每轮 --npm-batch 个（7 天内已刷过的跳过）。
    - git：按 stars 降序批量刷新 git_latest_commit；git_checked 记录差异开始日，
      差异满 7 天则把 git_commit 追平。
 5. --icons：按 stars 降序批量探测仓库常见图标路径（raw.githubusercontent HEAD），
@@ -313,17 +314,20 @@ def npm_latest_full(pkg: str):
             "engines_dsh": eng}
 
 
-def updates_npm(conn):
-    """npm 更新检测：刷新 npm_meta + npm_repo + dsh_engines；差异满 7 天追平 npm_version。"""
+def updates_npm(conn, batch):
+    """npm 更新检测：刷新 npm_meta + npm_repo + dsh_engines；差异满 7 天追平 npm_version。
+    按 stars 降序轮转，7 天内已刷过的跳过（全量一轮 7,000+ registry 请求会吃掉整个 CI 时长）。"""
     ensure_schema(conn)
     today = _today()
     cutoff_7 = _days_ago(7)
     rows = conn.execute("""
-        SELECT name, npm FROM plugins
-        WHERE install_source='npm' AND npm IS NOT NULL AND npm!=''
-        ORDER BY stars DESC
-    """).fetchall()
-    print(f"[updates-npm] 待刷新 {len(rows)} 个 npm 包")
+        SELECT p.name, p.npm FROM plugins p
+        LEFT JOIN npm_meta m ON m.pkg = p.npm
+        WHERE p.install_source='npm' AND p.npm IS NOT NULL AND p.npm!=''
+          AND (m.checked IS NULL OR m.checked <= ?)
+        ORDER BY p.stars DESC LIMIT ?
+    """, (cutoff_7, batch)).fetchall()
+    print(f"[updates-npm] 待刷新 {len(rows)} 个 npm 包（batch={batch}）")
     if not rows:
         return 0
 
@@ -382,6 +386,8 @@ def updates_npm(conn):
                 conn.execute("UPDATE plugins SET npm_version=? WHERE name=?",
                              (latest, name))
                 n_catchup += 1
+        if n_meta % 1000 == 0:
+            conn.commit()  # 分批落盘：CI 被取消时不丢整轮结果
     conn.commit()
     print(f"[updates-npm] 完成: npm_meta {n_meta} / 解析仓库 {n_repo} / engines.dsh {n_eng} / 追平 {n_catchup}")
     return n_meta
@@ -522,6 +528,8 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--git-batch", type=int, default=config.GIT_UPDATE_BATCH,
                     help="git 更新检测每轮仓库数（默认 config.GIT_UPDATE_BATCH）")
+    ap.add_argument("--npm-batch", type=int, default=config.NPM_UPDATE_BATCH,
+                    help="npm 更新检测每轮包数（默认 config.NPM_UPDATE_BATCH）")
     ap.add_argument("--icon-batch", type=int, default=config.ICON_BATCH,
                     help="图标探测每轮仓库数（默认 config.ICON_BATCH）")
     args = ap.parse_args()
@@ -540,7 +548,7 @@ def main():
     if args.downloads or args.all:
         fill_downloads(conn, config.NPM_DL_BATCH)
     if args.updates or args.all:
-        updates_npm(conn)
+        updates_npm(conn, args.npm_batch)
         updates_git(conn, args.git_batch)
     if args.icons or args.all:
         icons_probe(conn, args.icon_batch)

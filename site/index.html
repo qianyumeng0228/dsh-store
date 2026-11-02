@@ -21,6 +21,8 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14.5px;line-height:1.55}
+  /* 宿主内本页嵌在 iframe 里：文档高度随内容增长，滚动交给宿主那一条滚动条 */
+  html.inframe,html.inframe>body{overflow-y:hidden;height:auto}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
@@ -291,7 +293,7 @@
       <div class="stat">可装 <b class="ok" id="st-ok">-</b></div>
       <div class="stat">新增 <b id="st-new">-</b></div>
       <div class="stat">更新 <b id="st-upd" style="font-size:11px">-</b></div>
-      <button class="cp" id="btn-allupd" title="复制所有检测到有新版本插件的更新命令（重新安装即更新到最新版）">🔄 全部更新 <b id="st-upd2">0</b></button>
+      <button class="cp" id="btn-allupd" title="只处理「已安装且检测到新版本」的插件：静态站复制更新命令清单，宿主模式逐个真实更新">🔄 全部更新 <b id="st-upd2">0</b></button>
     </div>
   </div>
   <div class="idxbar"><div class="in">
@@ -394,9 +396,12 @@
 
 <script>
 const PAGE = 40;
+const IN_FRAME = (()=>{ try { return window.self !== window.top } catch(e){ return true } })();
+if (IN_FRAME) document.documentElement.classList.add("inframe");
 let DATA = null, shownCount = 0, curPlugin = null, modalLang = "zh";
 const state = { tab:"discover", q:"", cat:"all", sort:"stars", dir:"desc", since:"all", src:"all",
-                filters:new Set(), view:"row", dshVer: localStorage.getItem("dsh-dshver") || "" };
+                filters:new Set(), view: localStorage.getItem("dsh-view") || (IN_FRAME?"card":"row"),
+                dshVer: localStorage.getItem("dsh-dshver") || "" };
 const SORTS = [["downloads","近30天下载量"],["stars","Star 数"],["added","收录时间"],["updated","最近更新"],["name","名称"],["random","随机"]];
 const SINCES = [["all","全部时间"],["1d","最近1天"],["7d","最近7天"],["30d","最近30天"],["90d","最近90天"],["1y","最近1年"]];
 const SRCS = [["all","全部来源"],["npm","npm"],["git","GitHub"]];
@@ -406,16 +411,29 @@ let favs = new Set(JSON.parse(localStorage.getItem("dsh-favs")||"[]"));
 let installed = new Set(JSON.parse(localStorage.getItem("dsh-installed")||"[]"));
 let blocked = new Set(JSON.parse(localStorage.getItem("dsh-blocked")||"[]"));
 let queue = new Set(JSON.parse(localStorage.getItem("dsh-queue")||"[]"));
+let installedRepos = new Set();   // 宿主模式：本机已装 git 插件的 owner/repo（小写）
+/* 目录里的展示名对 git 插件可能带 owner- 前缀，本机依赖键却是包名，故两个都要比 */
+function isInstalled(p){ return installed.has(p.name) || (!!p.repo && installedRepos.has(String(p.repo).toLowerCase())); }
 
 /* ---------- 宿主模式（dsh-store-market 插件内运行时启用） ---------- */
 let HOST = null;
+/* 宿主模式：本机已装状态以宿主 API 为准，任何增删后重新拉取 */
+async function refreshInstalled(){
+  try {
+    const r = await fetch("api/installed", {cache:"no-store"});
+    if (!r.ok) return;
+    const d = await r.json();
+    installed = new Set(d.installed||[]);
+    installedRepos = new Set((d.installedDetails||[]).filter(e=>e && e.repo)
+      .map(e=>String(e.repo).toLowerCase()));
+  } catch(e){ /* 保持上一次结果 */ }
+}
 async function probeHost(){
   try {
     const r = await fetch("api/capabilities", {cache:"no-store"});
     if (!r.ok) return;
     HOST = await r.json();
-    const ir = await fetch("api/installed", {cache:"no-store"});
-    if (ir.ok){ const d = await ir.json(); installed = new Set(d.installed||[]); }
+    await refreshInstalled();
     document.body.classList.add("host");
     const cb = document.getElementById("copy-all");
     if (cb) cb.textContent = "全部安装";
@@ -423,16 +441,19 @@ async function probeHost(){
     if (qh) qh.textContent = "点插件上的 ⤓ 加入待装清单，一起真实安装";
   } catch(e){ HOST = null; }
 }
+/* 宿主 API 载荷：git 源必须带完整 owner/repo，name 同时给出便于回显 */
+function hostPayload(p){
+  return p.source==="git"
+    ? {source:"github", repo:p.repo, name:p.name}
+    : {source:"npm", name:p.name};
+}
 async function hostInstall(p, btn){
   const old = btn ? btn.textContent : "";
   if (btn){ btn.textContent = "安装中…"; btn.disabled = true; }
   try {
-    const body = p.source==="git"
-      ? {source:"github", repo:p.repo||p.name, name:p.name}
-      : {source:"npm", name:p.name};
-    const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
     const d = await r.json().catch(()=>({}));
-    if (d.ok){ installed.add(p.name); save("dsh-installed", installed); toast("✓ 已安装 " + p.name); buildTabbar(); render(); }
+    if (d.ok){ await refreshInstalled(); toast("✓ 已安装 " + p.name); buildTabbar(); render(); }
     else toast("✗ 安装失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
   } catch(e){ toast("✗ 安装失败：" + e.message); }
   if (btn){ btn.textContent = old; btn.disabled = false; }
@@ -442,7 +463,7 @@ async function hostUninstall(name){
   try {
     const r = await fetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name})});
     const d = await r.json().catch(()=>({}));
-    if (d.ok){ installed.delete(name); save("dsh-installed", installed); toast("✓ 已卸载 " + name); buildTabbar(); render(); }
+    if (d.ok){ await refreshInstalled(); toast("✓ 已卸载 " + name); buildTabbar(); render(); }
     else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
   } catch(e){ toast("✗ 卸载失败：" + e.message); }
 }
@@ -452,14 +473,13 @@ async function hostUpdateAll(upd){
     const p = upd[i];
     toast(`正在更新 ${i+1}/${upd.length}：${p.name}…`);
     try {
-      const body = p.source==="git" ? {source:"github", repo:p.repo||p.name} : {source:"npm", name:p.name};
-      const r = await fetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+      const r = await fetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
       const d = await r.json().catch(()=>({}));
       if (d.ok) ok++; else fail++;
     } catch(e){ fail++; }
   }
   toast(ok>0 ? `✓ 更新完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部更新失败");
-  buildTabbar(); render();
+  await refreshInstalled(); buildTabbar(); render();
 }
 async function hostInstallAll(qlist){
   let ok = 0, fail = 0;
@@ -467,14 +487,13 @@ async function hostInstallAll(qlist){
     const p = qlist[i];
     toast(`正在安装 ${i+1}/${qlist.length}：${p.name}…`);
     try {
-      const body = p.source==="git" ? {source:"github", repo:p.repo||p.name} : {source:"npm", name:p.name};
-      const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+      const r = await fetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
       const d = await r.json().catch(()=>({}));
-      if (d.ok){ ok++; installed.add(p.name); queue.delete(p.name); }
+      if (d.ok){ ok++; queue.delete(p.name); }
       else fail++;
     } catch(e){ fail++; }
   }
-  save("dsh-installed", installed); save("dsh-queue", queue);
+  await refreshInstalled(); save("dsh-queue", queue);
   toast(ok>0 ? `✓ 安装完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部安装失败");
   buildTabbar(); render(); renderDock();
 }
@@ -568,10 +587,7 @@ async function load(){
     document.getElementById("st-ok").textContent = DATA.installable;
     document.getElementById("st-new").textContent = seven;
     document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
-    const updAll = HOST
-      ? DATA.plugins.filter(p=>p.hasUpdate && installed.has(p.name)).length
-      : DATA.plugins.filter(p=>p.hasUpdate).length;
-    document.getElementById("st-upd2").textContent = updAll;
+    refreshUpdBadge();
     document.getElementById("btn-allupd").onclick = copyAllUpdates;
     const base = location.pathname.replace(/[^/]*$/,"");
     document.getElementById("idx-url").textContent = location.origin + base + "index.json";
@@ -580,7 +596,7 @@ async function load(){
       document.getElementById("cp-idx").style.display = "none";
     }
     loading.style.display = "none";
-    buildTabbar(); render();
+    syncViewBtns(); buildTabbar(); render();
   } catch(e){
     loading.innerHTML = "数据加载失败（" + esc(e.message) + "）<br><span style='font-size:12px'>请检查网络后刷新重试</span>";
   }
@@ -602,7 +618,12 @@ function daysSince(d){
 }
 
 /* ---------- 标签页 ---------- */
+function refreshUpdBadge(){
+  if (!DATA) return;
+  document.getElementById("st-upd2").textContent = DATA.plugins.filter(p=>p.hasUpdate && isInstalled(p)).length;
+}
 function buildTabbar(){
+  refreshUpdBadge();
   const el = document.getElementById("tabbar");
   const tabs = [
     ["discover","发现",""],
@@ -631,7 +652,7 @@ function isThemePlugin(p){
 function baseList(){
   let list;
   if (state.tab==="fav") list = DATA.plugins.filter(p=>favs.has(p.name));
-  else if (state.tab==="installed") list = DATA.plugins.filter(p=>installed.has(p.name));
+  else if (state.tab==="installed") list = DATA.plugins.filter(isInstalled);
   else if (state.tab==="blocked") list = DATA.plugins.filter(p=>blocked.has(p.name));
   else {
     list = DATA.plugins.filter(p=>!blocked.has(p.name));
@@ -656,7 +677,7 @@ function filtered(){
       if (f==="new") list = list.filter(isNew);
       if (f==="update") list = list.filter(p=>p.hasUpdate);
       if (f==="fav") list = list.filter(p=>favs.has(p.name));
-      if (f==="installed") list = list.filter(p=>installed.has(p.name));
+      if (f==="installed") list = list.filter(isInstalled);
     }
     const beforeCompat = list.length;
     list = list.filter(compatOk);
@@ -781,7 +802,7 @@ function pills(p){
 function opsHtml(p){
   return `<div class="ops">
     <button class="op${favs.has(p.name)?" on":""}" data-op="fav" data-n="${esc(p.name)}" title="收藏">♥</button>
-    <button class="op${installed.has(p.name)?" on":""}" data-op="installed" data-n="${esc(p.name)}" title="标记已安装">✓</button>
+    <button class="op${isInstalled(p)?" on":""}" data-op="installed" data-n="${esc(p.name)}" title="标记已安装">✓</button>
     <button class="op${queue.has(p.name)?" on":""}" data-op="queue" data-n="${esc(p.name)}" title="加入待安装清单">⤓</button>
     <button class="op danger${blocked.has(p.name)?" on":""}" data-op="blocked" data-n="${esc(p.name)}" title="屏蔽">🚫</button>
   </div>`;
@@ -839,12 +860,10 @@ function draw(list){
     e.stopPropagation();
     const n = b.dataset.n, op = b.dataset.op;
     if (op==="installed" && HOST){
-      if (installed.has(n)) hostUninstall(n);
-      else {
-        const p = DATA.plugins.find(x=>x.name===n);
-        if (p) hostInstall(p, b);
-        else { installed.add(n); save("dsh-installed", installed); toast("已标记已安装"); buildTabbar(); render(); }
-      }
+      const p = DATA.plugins.find(x=>x.name===n);
+      if (p ? isInstalled(p) : installed.has(n)) hostUninstall(n);
+      else if (p) hostInstall(p, b);
+      else { installed.add(n); save("dsh-installed", installed); toast("已标记已安装"); buildTabbar(); render(); }
       return;
     }
     const set = {fav:favs, installed:installed, blocked:blocked, queue:queue}[op];
@@ -939,7 +958,7 @@ function openModalByPlugin(p){
   const inst = document.getElementById("m-install");
   if (p.installable && p.install){
     inst.innerHTML = HOST
-      ? `<div class="install-box"><code style="font-size:12px">${esc(p.install)}</code><button id="cp">${installed.has(p.name)?"更新":"安装"}</button></div>`
+      ? `<div class="install-box"><code style="font-size:12px">${esc(p.install)}</code><button id="cp">${isInstalled(p)?"更新":"安装"}</button></div>`
       : `<div class="install-box"><code>${esc(p.install)}</code><button id="cp">复制</button></div>`;
     document.getElementById("cp").onclick = e=>{
       if (HOST){ hostInstall(p, e.target); return; }
@@ -992,7 +1011,7 @@ function copyAllQueue(e){
   navigator.clipboard.writeText(all).then(()=>toast("已复制 " + qlist.length + " 条安装命令 ✓")).catch(()=>toast("复制失败"));
 }
 function copyAllUpdates(){
-  const upd = DATA.plugins.filter(p=>p.hasUpdate && installed.has(p.name));
+  const upd = DATA.plugins.filter(p=>p.hasUpdate && isInstalled(p));
   if (!upd.length){ toast("已安装的插件中没有检测到有新版本的"); return; }
   if (HOST){ hostUpdateAll(upd); return; }
   const cmds = upd.map(p=> p.source==="npm" ? `dsh plugin add ${p.name}` : `dsh plugin add github:${p.repo}`);
@@ -1159,9 +1178,9 @@ function renderAdvanced(){
   };
   document.getElementById("btn-reset").onclick = ()=>{
     if (confirm("确认重置全部本地数据（收藏/已装/屏蔽/待装/DSH 版本）？此操作不可恢复。")){
-      ["dsh-favs","dsh-installed","dsh-blocked","dsh-queue","dsh-dshver"].forEach(k=>localStorage.removeItem(k));
-      favs.clear(); installed.clear(); blocked.clear(); queue.clear();
-      state.dshVer = "";
+      ["dsh-favs","dsh-installed","dsh-blocked","dsh-queue","dsh-dshver","dsh-view"].forEach(k=>localStorage.removeItem(k));
+      favs.clear(); installed.clear(); installedRepos.clear(); blocked.clear(); queue.clear();
+      state.dshVer = ""; state.view = IN_FRAME?"card":"row"; syncViewBtns();
       buildTabbar(); renderAdvanced(); toast("已重置");
     }
   };
@@ -1283,10 +1302,14 @@ document.getElementById("more").onclick = ()=>{
 };
 document.getElementById("v-row").onclick = ()=>setView("row");
 document.getElementById("v-card").onclick = ()=>setView("card");
+function syncViewBtns(){
+  document.getElementById("v-row").classList.toggle("on", state.view==="row");
+  document.getElementById("v-card").classList.toggle("on", state.view==="card");
+}
 function setView(v){
   state.view = v;
-  document.getElementById("v-row").classList.toggle("on", v==="row");
-  document.getElementById("v-card").classList.toggle("on", v==="card");
+  localStorage.setItem("dsh-view", v);
+  syncViewBtns();
   draw(filtered());
 }
 document.getElementById("cp-idx").onclick = e=>{

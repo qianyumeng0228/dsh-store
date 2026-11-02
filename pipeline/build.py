@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -119,6 +120,14 @@ def load_icon_probe(conn):
     return m
 
 
+def row_pname(r):
+    """索引内的唯一展示名：npm 包已收录版本时用包名，否则用仓库名末段。"""
+    if r["install_source"] == "npm" and r["npm_version"]:
+        return r["npm"] or ""
+    repo = r["repo"] or ""
+    return repo.split("/")[-1] if repo else (r["name"] or "")
+
+
 def main():
     config.ensure_dirs()
     conn = sqlite3.connect(config.DB_PATH)
@@ -126,25 +135,37 @@ def main():
     rows = fetch_rows(conn, config.INDEX_STATUSES, config.INDEX_CATEGORIES)
     print(f"[build] 候选（verified+plugin/bundle）: {len(rows)}")
 
-    # 1) npm 插件补版本（有缓存的跳过）
+    # 1) npm 插件补收录版本：优先复用 incremental 已抓到的 npm_meta，只对没记录的包打 registry
+    npm_meta_map = load_npm_meta(conn)
     npm_rows = [r for r in rows if r["install_source"] == "npm"]
     need = [r for r in npm_rows if not r["npm_version"]]
-    print(f"[build] npm 插件 {len(npm_rows)} 个，待补版本 {len(need)} 个")
-    if need:
+    from_meta = [r for r in need if npm_meta_map.get(r["npm"])]
+    for r in from_meta:
+        conn.execute("UPDATE plugins SET npm_version=? WHERE name=?",
+                     (npm_meta_map[r["npm"]], r["name"]))
+    conn.commit()
+    # npm_meta 里 latest 为空的包是 registry 确认过的 404，不再重试
+    retry = [r for r in need if r["npm"] not in npm_meta_map]
+    print(f"[build] npm 插件 {len(npm_rows)} 个，待补版本 {len(need)} 个："
+          f"npm_meta 直接补齐 {len(from_meta)} / 需请求 registry {len(retry)} / "
+          f"已确认 404 跳过 {len(need) - len(from_meta) - len(retry)}")
+    if retry:
         done = 0
         with ThreadPoolExecutor(max_workers=8) as ex:
-            futs = {ex.submit(npm_latest, r["npm"]): r for r in need}
+            futs = {ex.submit(npm_latest, r["npm"]): r for r in retry}
             for fut in as_completed(futs):
                 r = futs[fut]
                 res = fut.result()
                 done += 1
                 if res:
                     ver, eng = res
-                    conn.execute("UPDATE plugins SET npm_version=? WHERE name=?",
-                                 (ver, r["name"]))
+                    conn.execute(
+                        "UPDATE plugins SET npm_version=?,"
+                        " dsh_engines=COALESCE(NULLIF(dsh_engines,''), ?) WHERE name=?",
+                        (ver, eng or "", r["name"]))
                     conn.commit()
                 if done % 500 == 0:
-                    print(f"[build] npm 版本进度 {done}/{len(need)}")
+                    print(f"[build] npm 版本进度 {done}/{len(retry)}")
         conn.commit()
 
     # 2) 组装索引
@@ -154,13 +175,23 @@ def main():
     cat_stats = {}
     skipped_git_nocommit = 0
     dup = 0
+    qualified = 0
     downloads_map = load_downloads(conn)
-    npm_meta_map = load_npm_meta(conn)
     probe_map = load_icon_probe(conn)
     dshopen_maps, awesome_maps = load_icon_maps()
     print(f"[build] 图标源: dshopen {len(dshopen_maps['name'])} 条 / awesome {len(awesome_maps['name'])} 条 / 探测命中 {len(probe_map)} 个仓库")
 
     rows = fetch_rows(conn, config.INDEX_STATUSES, config.INDEX_CATEGORIES)
+    # 展示名撞名：同一展示名下出现多个不同仓库时，用仓库名命名的条目加 owner- 前缀。
+    # 否则按 stars 降序只会留下一个，其余真实插件被当成重复整条丢弃。
+    name_repos = {}
+    for r in rows:
+        key = row_pname(r).lower()
+        repo = (r["repo"] or "").lower()
+        if key and repo:
+            name_repos.setdefault(key, set()).add(repo)
+    conflict_bases = {k for k, v in name_repos.items() if len(v) > 1}
+    print(f"[build] 撞名展示名 {len(conflict_bases)} 个（跨多仓库，git 条目加 owner- 前缀）")
     for r in rows:
         name = r["name"]; repo = r["repo"]; path = r["path"]
         title_en = r["title_en"]; title_zh = r["title_zh"]
@@ -208,28 +239,23 @@ def main():
         # ---- 决定可安装性与安装标识 ----
         installable = False
         src = None
+        pname = row_pname(r)
+        name_from_repo = not (install_source == "npm" and npm_version)
         if install_source == "npm" and npm_version:
             installable = True
-            pname = npm
             src = {"type": "npm"}
-        elif install_source == "git" and git_commit:
+        elif git_commit:
+            # git 源，或 npm 版本还没补上：先按 commit 装，补齐版本后升级为 npm
             installable = True
-            pname = repo.split("/")[-1]
             src = {"type": "git", "url": f"https://github.com/{repo}", "commit": git_commit}
-        elif install_source == "npm":
-            # 版本还没补上：先降级为 git，待 incremental 补 commit 后升级
-            if git_commit:
-                installable = True
-                pname = repo.split("/")[-1]
-                src = {"type": "git", "url": f"https://github.com/{repo}", "commit": git_commit}
-            else:
-                skipped_git_nocommit += 1
-                installable = False
-                pname = repo.split("/")[-1]
         else:
             skipped_git_nocommit += 1
-            installable = False
-            pname = repo.split("/")[-1]
+
+        if name_from_repo and pname.lower() in conflict_bases:
+            owner = repo.split("/")[0].lower() if "/" in repo else ""
+            if owner:
+                pname = f"{owner}-{pname}"
+                qualified += 1
 
         if pname in seen_names:
             dup += 1
@@ -313,7 +339,8 @@ def main():
     }
     (config.DIST_DIR / "index.json").write_text(
         json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"[build] index.json: {len(plugins_out)} 条可索引（含不可装占位 {skipped_git_nocommit}）")
+    print(f"[build] index.json: {len(plugins_out)} 条可索引（含不可装占位 {skipped_git_nocommit}，"
+          f"撞名限定 {qualified}，重复合并 {dup}）")
 
     # ---- 网站数据 ----
     site_data = {

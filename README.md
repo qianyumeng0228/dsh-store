@@ -9,19 +9,27 @@
 
 每次 push / 每天 03:17 UTC 由 GitHub Actions 自动执行：种子刷新 → git commit 补齐 → npm 版本/更新检测 → 图标探测 → topic 扫描 → 生成索引 → 发布 Pages，无需手动运维。
 
-## 当前数据（2026-11-01 自动刷新）
+## 当前数据（2026-11-02 实测线上 `data/plugins.json`）
 
 | 指标 | 数值 |
 |---|---|
-| 索引收录（verified + plugin/bundle） | 17,799+（每天增量增长） |
-| 其中可一键安装 | 6,637（npm 全量 + git 插件每天补 commit） |
+| 索引收录（去重后输出） | 17,447 |
+| 候选（verified + plugin/bundle） | 20,883 |
+| 其中可一键安装 | 4,830（来源：npm 6,381 / git 11,066） |
 | 种子来源 | dsh.works `plugins.json`（21,928 条，每日刷新） |
-| 作者头像覆盖（真实 GitHub 头像） | 16,933（95.1%） |
-| 插件图标（dshopen + awesome 双源，GitHub 路径探测每日增量补齐） | 631 |
-| 有新版本标记（数据刷新周期内有新版/新提交） | 174 条实时检测 |
-| DSH 适配版本区间（engines.dsh） | 1,124 |
+| 作者头像覆盖（真实 GitHub 头像） | 16,416（94.1%） |
+| 插件图标（dshopen + awesome 双源 + GitHub 路径探测） | 626 |
+| 有新版本标记 | 150 |
+| DSH 适配版本区间（engines.dsh） | 1,081 |
+| npm 近 30 天下载量已补齐 | 359 |
 | 判定标准 | dsh.works 逐条核验的 `package.json#dsh` 字段证据 + 自建 topic 扫描复核 |
 | 分类 | 17 个双语分类（工具与能力 / 记忆 / 界面增强 / 模型与账号接入 …） |
+
+> 上述数值低于本 README 早先记录的 17,799 / 6,637，原因不是插件变少，而是每日增量成果没有累积：
+> `actions/cache` 用了固定 key（同 key 缓存不可覆盖，命中后 post 步跳过上传），`store.db` 被冻结在首日快照，
+> 每轮补好的 git commit / npm 下载量 / 图标探测 / 新仓库扫描随运行结束一起丢弃。
+> 另有一处 `build.py` 的 npm 镜像降级因 `HTTPError` 未导入而整段失效，导致收录版本号补不上、可装数被压低。
+> 两处均已修复，可装数与图标覆盖会随每日运行重新增长。
 
 ## 功能（对标 dsh-market 的可移植部分）
 
@@ -81,26 +89,37 @@ dsh plugin add github:<owner/repo>       # git 插件
 ```powershell
 python pipeline/seed.py                 # 种子刷新
 python pipeline/incremental.py --all    # 补 commit + npm 更新检测 + 图标探测 + 扫新仓库（本地无 token 时每轮 40 个）
+python pipeline/incremental.py --updates --npm-batch 500 --git-batch 200   # 本地只想小范围试更新检测时
 python pipeline/build.py                # 生成索引与网站
 ```
+
+`store.db` 是增量成果的唯一载体：云端由 `actions/cache` 按运行编号跨运行累积（缓存键必须每轮唯一，否则命中旧键后不会上传，成果全部丢失）。
 
 ## 已验证
 
 - [x] `index.json` 符合 format-1（format/title/metadata.categories/plugins[] 结构与现有 vlln、dshopen 索引一致）
-- [x] 必填字段零缺失，17,799 条全部有名称/标题/描述/仓库
+- [x] 输出条目必填字段零缺失，名称唯一非空，可装条目 `versions[0].version` 均为非空字符串
 - [x] 新字段（author/avatar/icon/dsh/latestVersion/hasUpdate）全部进入管道输出与网站数据，build 幂等（连跑两次指纹一致）
 - [x] 作者头像/图标为真实数据（抽查 dsh-im：作者 xmanrui、头像 URL 实测 200、最新版 5.9.1 > 收录 5.9.0 正确标记有新版本）
 - [x] 网站渲染：头像 / 图标 / 🔄 有新版本 / DSH 兼容过滤 / 提交插件 / 横滑分区 / 分类导航 / 搜索 / 排序 / 筛选 / 详情弹层 / 待装栏（本地 fixture + 真实数据双验证）
 - [x] 本地 http 服务 200，`index.json` 与 `data/plugins.json` 可访问且为合法 JSON
 - [x] GitHub Pages 线上：首页 200（text/html）、索引与数据 200
 - [x] Actions 流水线：seed → incremental → build → deploy 全自动跑通（含 BOM/限速/失败率熔断容错）
-- [ ] git 插件 commit 全量补齐（每天 2,000 个，进行中）
-- [ ] 图标 GitHub 路径探测云端每日 400 个逐步补齐（本地网络对 raw.githubusercontent.com 超时，云端不受影响）
+- [x] 8 条 fixture 用例覆盖 build 输出：npm_meta 直接补版本（不打 registry）、404 包不再重复请求、跨仓库撞名两条都保留、同仓库重复仍合并、git 安装命令用完整 owner/repo、hasUpdate 判定
+- [x] `http_get_json` 429 自动降级 npmmirror 并取到版本，404 抛 HTTPError（此前 NameError 被吞导致降级整段失效）
+- [x] 网站在浏览器实测：静态站（无宿主 API 时降级为复制命令、默认列表视图、视图选择持久化、屏蔽/收藏/待装/已装联动、顶部"全部更新"计数随标记实时变化）与宿主模式（已装识别含按 repo 匹配的 git 插件、安装/更新载荷、iframe 内只保留宿主一条滚动条）两条路径
+- [x] `deploy/deploy.ps1` 可执行（此前 `param([string]$Host)` 与 PowerShell 只读自动变量冲突，一运行即 VariableNotWritable）
+- [ ] git 插件 commit 全量补齐：缓存修复后每天 2,000 个开始真正累积（当前待补 13,015 个）
+- [ ] 图标 / 下载量 / npm engines.dsh 同理逐日累积（`NPM_UPDATE_BATCH=2000` ⇒ 7,073 个包约 3.5 天轮完一圈）
 
 ## 已知边界
 
 - **"有新版本"的语义**：本站是目录站，标记 = 与本站上次收录相比发布了新版本/新提交（7 天内自动追平收录版本）；**无法读取用户本机已装版本**。真实的一键安装/全部更新/进度条/重启提醒/导出日志/打开配置文件/任务面板/评论计数是宿主内 dsh-market 的能力，本站以"手动标记已安装 + 待装清单 + 复制命令"替代，高级页"关于"有完整说明。
-- 索引体积约 9.4MB（17,799+ 条全字段）；DSH 15 秒加载窗口在 Pages CDN 下足够，若要更小可后续生成精简索引。
+- **展示名撞名规则**：同一展示名下出现多个不同仓库时，用仓库名命名的条目会加 `owner-` 前缀（npm 包名本身全局唯一，不加前缀）。此前实现按展示名去重且只保留 star 最高的一个，实测丢弃了 3,436 条真实插件。
+- 索引体积约 10.9MB（17,447 条全字段）；DSH 15 秒加载窗口在 Pages CDN 下足够，若要更小可后续生成精简索引。
+- `index.json` 入库是为了 jsDelivr 镜像，每轮最多 ~11MB；仓库体积随时间线性增长，需要时改用 Release 资产或孤儿分支存放。
 - `dsh.works` 的 21,928 条含 skill/theme/tool 类别，当前索引只收 plugin/bundle；技能包后续可按需放开。
 - 分类由 tags 映射，无 tag 命中的插件落入「工具与能力」兜底。
 - 作者头像依赖 GitHub 头像 CDN（`github.com/<owner>.png`），网络受限时可能加载失败（前端已做 onerror 自动隐藏，不影响浏览）。
+- 定时构建不保证准点：`03:17 UTC` 的 schedule 曾延后到 10:32 才起跑，个别日子未触发。需要严格时效请改 `workflow_dispatch` 外部触发。
+- `site/index.html` 是 **本仓库为唯一来源**，`dsh-store-market` 内的同名副本由其 `sync-upstream` 工作流同步；改 UI 只改这里，宿主专用差异（iframe 不滚动）由页面运行时检测，不再靠两份文件各自维护。

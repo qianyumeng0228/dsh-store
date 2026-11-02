@@ -15,7 +15,8 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # 一轮构建 30-50 分钟，取消在跑的等于丢掉整轮增量成果，改为排队
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,15 +28,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      # 持久化主库：store.db 缓存跨运行保留，git_commit / npm_version 增量字段持续累积
+      # 持久化主库：store.db 缓存跨运行保留，git_commit / npm_version 增量字段持续累积。
+      # key 必须每次运行都不同：同名 key 的缓存不可覆盖，命中后 post 步会跳过上传，
+      # 于是每轮的补齐成果都被丢掉（曾使 store.db 冻结在首日快照）。
       - uses: actions/cache@v4
         with:
           path: |
             data/store.db
             data/store.db-*
-          key: dsh-store-db-v1
+          key: dsh-store-db-v1-${{ github.run_id }}
           restore-keys: |
-            dsh-store-db-v1
+            dsh-store-db-v1-
 
       - name: Fetch icon source indexes
         run: |
