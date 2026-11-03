@@ -684,6 +684,31 @@ function hashStr(s){
   return h;
 }
 
+/* ---------- 双滚动条自检 ----------
+   宿主文档的 origin 是 dsh-app://app/，插件的客户端在那边用相对地址请求会被
+   接口守卫（要求回环 Host）挡掉，所以这个上报放在 iframe 里做：本页对
+   /dsh-store/api/* 的请求是通的。iframe 与宿主同源，能直接量到宿主到底要不要
+   滚 —— 那才是「第二条滚动条」的判据。 */
+function reportLayout(){
+  if (!IN_FRAME) return;
+  let p;
+  try { p = window.parent; } catch(e){ return }
+  let pd;
+  try { pd = p.document; } catch(e){ return }   // 跨源就读不到，放弃上报
+  const de = pd.documentElement;
+  const snap = {
+    selfH: window.innerHeight,
+    selfScrollH: de === document.documentElement ? document.documentElement.scrollHeight : null,
+    parentH: p.innerHeight,
+    parentScrollH: de.scrollHeight,
+    parentScrollW: de.scrollWidth,
+    // 宿主文档自己要滚，就是用户看到的第二条滚动条
+    hostScrolls: de.scrollHeight > p.innerHeight + 2,
+  };
+  apiFetch("api/layout", { method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify(snap) }).catch(()=>{});
+}
+
 async function load(){
   const loading = document.getElementById("loading");
   loading.style.display = "block";
@@ -707,6 +732,9 @@ async function load(){
     }
     loading.style.display = "none";
     syncViewBtns(); buildTabbar(); render();
+    // 宿主包裹层的只收缩校正每 300ms 走一次，收敛后再报，免得报到一半
+    setTimeout(reportLayout, 1200);
+    setTimeout(reportLayout, 3000);
   } catch(e){
     loading.innerHTML = "数据加载失败（" + esc(e.message) + "）<br><span style='font-size:12px'>请检查网络后刷新重试</span>";
   }
