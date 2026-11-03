@@ -599,6 +599,7 @@ async function probeHost(){
     if (cb) cb.textContent = "全部安装";
     const qh = document.getElementById("qhint");
     if (qh) qh.textContent = "点插件上的 ⤓ 加入待装清单，一起真实安装";
+    pollOps(true);   // 回填历史任务：重开页面也看得到刚才装到一半/失败的东西
   } catch(e){ HOST = null; }
 }
 /* ---------- 任务面板：安装 / 更新 / 卸载实时进度 ----------
@@ -669,8 +670,10 @@ function activeCount(){
   return ops.filter(t => t.state === "queued" || t.state === "running").length +
          pendingOps.filter(t => t.state === "queued").length;
 }
-function pollOps(){
-  if (opTimer) return;
+/* initial=true：只做基线（重开页面时回填历史任务），不弹"任务结束"提示 */
+function pollOps(initial){
+  if (opTimer && !initial) return;
+  clearTimeout(opTimer);
   opTimer = setTimeout(async ()=>{
     opTimer = null;
     try {
@@ -685,6 +688,7 @@ function pollOps(){
             if (prev === t.state) continue;
             opPrev.set(t.id, t.state);
             if (opPrev.size > 400) opPrev.delete(opPrev.keys().next().value);
+            if (initial) continue;
             if (t.state === "done") opDoneCount++;
             else if (t.state === "failed") opFailCount++;
           }
@@ -694,7 +698,7 @@ function pollOps(){
     } catch(e){ /* 宿主忙或断连，下一轮再试 */ }
     renderDock();
     if (activeCount() > 0) { pollOps(); return; }
-    if (opDoneCount || opFailCount) {
+    if (!initial && (opDoneCount || opFailCount)) {
       const dn = opDoneCount, fl = opFailCount;
       opDoneCount = 0; opFailCount = 0;
       await refreshInstalled();
