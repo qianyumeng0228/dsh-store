@@ -22,14 +22,17 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14.5px;line-height:1.55}
-  /* 宿主内本页嵌在 iframe 里。iframe 必须是一个固定高度的视口、由视口自己滚动：
-     若把 iframe 撑到内容高度，iframe 的视口就等于整篇文档，页面里所有
-     position:fixed 的浮层（详情弹层、待装栏、toast）都会按整篇文档定位，
-     弹层会落到文档中部 —— 用户看到的就是"点开的卡片在最底下"。
-     这里不能给 html/body 写 overflow：一旦 html 成了滚动容器，滚动的就不再是
-     视口，window.scrollTo 静默失效，翻页后「回到列表顶部」就点不动。 */
-  html.inframe{height:100%}
-  html.inframe>body{min-height:100%}
+  /* 宿主内本页嵌在 iframe 里，iframe 被撑到内容高度、由宿主设置页的内容列负责
+     滚动 —— 整页只有一条滚动条，和 dshmarket 一致。
+     代价是 iframe 的视口等于整篇文档，position:fixed 会按整篇文档定位，弹层、
+     待装栏、toast 全会跑偏。所以这三个浮层在宿主内不用 fixed，改放进 #vp：
+     一个绝对定位、正好罩住「当前可见窗口」的盒子，坐标由 syncViewport() 按
+     宿主的滚动状态实时算出。 */
+  html.inframe,html.inframe>body{overflow-y:hidden;height:auto}
+  /* 宿主内：浮层按「当前可见窗口」定位，--vis-top / --vis-h 由 syncViewport() 维护 */
+  html.inframe .mask{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
+  html.inframe .dock{position:absolute;top:calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px);bottom:auto;transform:translate(-50%,-100%)}
+  html.inframe .toast{position:absolute;top:calc(var(--vis-top,0px) + 74px);bottom:auto}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
@@ -689,6 +692,42 @@ function hashStr(s){
    接口守卫（要求回环 Host）挡掉，所以这个上报放在 iframe 里做：本页对
    /dsh-store/api/* 的请求是通的。iframe 与宿主同源，能直接量到宿主到底要不要
    滚 —— 那才是「第二条滚动条」的判据。 */
+/* ---------- 宿主内可见窗口 ----------
+   iframe 被撑到内容高度、由宿主的内容列滚动，于是本页的「视口」其实是整篇文档。
+   浮层要罩住用户真正看得见的那一段，就得按宿主的滚动状态算：iframe 顶边到
+   滚动容器可见区顶边的距离 = --vis-top，可见高度 = --vis-h。
+   同源才能读，读不到就保持默认（整篇文档），退化成旧行为而不是报错。 */
+let _vpScrollEl = null, _vpLast = "";
+function syncViewport(){
+  if (!IN_FRAME) return;
+  const fe = window.frameElement;
+  if (!fe) return;
+  let p;
+  try { p = window.parent; } catch(e){ return }
+  let sc = _vpScrollEl;
+  if (!sc || !sc.isConnected) {
+    sc = fe.parentElement;
+    while (sc && sc !== p.document.body) {
+      const oy = p.getComputedStyle(sc).overflowY;
+      if (/(auto|scroll)/.test(oy) && sc.scrollHeight > sc.clientHeight + 2) break;
+      sc = sc.parentElement;
+    }
+    if (!sc || sc === p.document.body) sc = p.document.scrollingElement || p.document.body;
+    _vpScrollEl = sc;
+    try { sc.addEventListener("scroll", syncViewport, {passive:true}); } catch(e){}
+  }
+  const fr = fe.getBoundingClientRect();
+  const sr = sc.getBoundingClientRect();
+  const visTop = Math.max(0, sr.top - fr.top);
+  const visH = Math.max(120, Math.min(fr.height, sr.bottom - fr.top) - visTop);
+  const key = visTop + "x" + visH;
+  if (key === _vpLast) return;
+  _vpLast = key;
+  const rs = document.documentElement.style;
+  rs.setProperty("--vis-top", visTop + "px");
+  rs.setProperty("--vis-h", visH + "px");
+}
+
 function reportLayout(){
   if (!IN_FRAME) return;
   let p;
@@ -700,7 +739,9 @@ function reportLayout(){
   // 「两条滚动条」不一定是文档在滚：设置页内容列可能是中间某一层在滚，
   // 只看 documentElement 会漏掉它 —— 上一版就是这么漏的。
   const chain = [];
-  let el = p.frameElement;
+  // 从「本页自己」的 frameElement 起步：p.frameElement 是父窗口在它的父级里的
+  // 嵌入元素，顶层窗口上恒为 null —— 上一版就是从这里起步，于是整条链是空的。
+  let el = window.frameElement;
   let guard = 0;
   while (el && guard++ < 12) {
     let cs = null;
@@ -711,6 +752,7 @@ function reportLayout(){
       ch: el.clientHeight, sh: el.scrollHeight,
       cw: el.clientWidth, sw: el.scrollWidth,
       oy: cs ? cs.overflowY : null,
+      ox: cs ? cs.overflowX : null,
     });
     el = el.parentElement;
   }
@@ -723,6 +765,8 @@ function reportLayout(){
     parentScrollH: de.scrollHeight,
     parentScrollW: de.scrollWidth,
     hostScrolls: de.scrollHeight > p.innerHeight + 2,
+    visTop: document.documentElement.style.getPropertyValue("--vis-top"),
+    visH: document.documentElement.style.getPropertyValue("--vis-h"),
     chain: chain,
   };
   apiFetch("api/layout", { method:"POST", headers:{"content-type":"application/json"},
@@ -753,6 +797,9 @@ async function load(){
     loading.style.display = "none";
     syncViewBtns(); buildTabbar(); render();
     // 宿主包裹层的只收缩校正每 300ms 走一次，收敛后再报，免得报到一半
+    // 宿主内容列滚动时同步可见窗口；低频兜底以防滚动事件没挂上
+    syncViewport();
+    setInterval(syncViewport, 250);
     setTimeout(reportLayout, 1200);
     setTimeout(reportLayout, 3000);
   } catch(e){
