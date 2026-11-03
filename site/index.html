@@ -22,8 +22,14 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14.5px;line-height:1.55}
-  /* 宿主内本页嵌在 iframe 里：文档高度随内容增长，滚动交给宿主那一条滚动条 */
-  html.inframe,html.inframe>body{overflow-y:hidden;height:auto}
+  /* 宿主内本页嵌在 iframe 里。iframe 必须是一个固定高度的视口、由视口自己滚动：
+     若把 iframe 撑到内容高度，iframe 的视口就等于整篇文档，页面里所有
+     position:fixed 的浮层（详情弹层、待装栏、toast）都会按整篇文档定位，
+     弹层会落到文档中部 —— 用户看到的就是"点开的卡片在最底下"。
+     这里不能给 html/body 写 overflow：一旦 html 成了滚动容器，滚动的就不再是
+     视口，window.scrollTo 静默失效，翻页后「回到列表顶部」就点不动。 */
+  html.inframe{height:100%}
+  html.inframe>body{min-height:100%}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
@@ -173,9 +179,16 @@
   .hcard .hbd{display:flex;gap:4px;flex-wrap:wrap}
   .hcard .hbd .badge{font-size:10px;padding:0 6px}
 
-  .more-wrap{text-align:center;margin-top:22px}
-  #more{padding:9px 36px;border-radius:9px;border:1px solid var(--accent);background:#fff;color:var(--accent-deep);font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:600}
-  #more:hover{background:var(--accent-bg)}
+  .pager{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:22px;font-size:13px;color:var(--fg2)}
+  .pager:empty{display:none}
+  .pg-btn{min-width:32px;padding:6px 11px;border:1px solid var(--line2);border-radius:8px;background:#fff;color:var(--fg2);cursor:pointer;font-family:inherit;font-size:13px;line-height:1.2}
+  .pg-btn:hover:not(:disabled):not(.on){background:var(--accent-bg);border-color:var(--accent);color:var(--accent-deep)}
+  .pg-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;cursor:default}
+  .pg-btn:disabled{opacity:.42;cursor:not-allowed}
+  .pg-gap{padding:0 2px;color:var(--fg3)}
+  .pg-info{margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--fg3)}
+  .pg-size{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
+  .pg-size select{padding:5px 7px;border:1px solid var(--line2);border-radius:7px;background:#fff;color:var(--fg);font-family:inherit;font-size:12.5px;cursor:pointer}
   .empty{text-align:center;color:var(--fg3);padding:60px 0;font-size:14px}
 
   /* ---------- 待装栏 ---------- */
@@ -342,10 +355,12 @@
 
   <div id="submit-zone" class="submit-wrap" style="display:none"></div>
 
+  <div class="pager" id="pager-top"></div>
+
   <div class="rows" id="rows"></div>
   <div class="grid" id="grid"></div>
 
-  <div class="more-wrap"><button id="more">加载更多</button></div>
+  <div class="pager" id="pager-bottom"></div>
   <div class="empty" id="empty" style="display:none"></div>
 
   <div class="loading" id="loading" style="display:none"><span class="spin"></span>正在加载插件数据…</div>
@@ -410,13 +425,15 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const PAGE = 40;
+const PER_PAGE_CHOICES = [24, 48, 96];
 const IN_FRAME = (()=>{ try { return window.self !== window.top } catch(e){ return true } })();
 if (IN_FRAME) document.documentElement.classList.add("inframe");
-let DATA = null, shownCount = 0, curPlugin = null, modalLang = "zh";
+let DATA = null, curPlugin = null, modalLang = "zh", lastListSig = "";
 const state = { tab:"discover", q:"", cat:"all", sort:"stars", dir:"desc", since:"all", src:"all",
                 filters:new Set(), view: localStorage.getItem("dsh-view") || (IN_FRAME?"card":"row"),
-                dshVer: localStorage.getItem("dsh-dshver") || "" };
+                dshVer: localStorage.getItem("dsh-dshver") || "",
+                page: 1,
+                perPage: (()=>{ const n=+localStorage.getItem("dsh-perpage"); return PER_PAGE_CHOICES.includes(n)?n:24 })() };
 const SORTS = [["downloads","近30天下载量"],["stars","Star 数"],["added","收录时间"],["updated","最近更新"],["name","名称"],["random","随机"]];
 const SINCES = [["all","全部时间"],["1d","最近1天"],["7d","最近7天"],["30d","最近30天"],["90d","最近90天"],["1y","最近1年"]];
 const SRCS = [["all","全部来源"],["npm","npm"],["git","GitHub"]];
@@ -810,7 +827,8 @@ function render(){
   document.getElementById("submit-zone").style.display = "none";
   document.getElementById("rows").style.display = "none";
   document.getElementById("grid").style.display = "none";
-  document.getElementById("more").style.display = "none";
+  document.getElementById("pager-top").innerHTML = "";
+  document.getElementById("pager-bottom").innerHTML = "";
   document.getElementById("count-line").style.display = "none";
   document.getElementById("note-line").style.display = "none";
   document.getElementById("empty").style.display = "none";
@@ -829,13 +847,21 @@ function render(){
   const list = filtered();
   document.getElementById("empty").style.display = list.length ? "none" : "block";
   document.getElementById("empty").innerHTML = "没有匹配的插件<br><span style='font-size:12px'>换个关键词或清除筛选试试</span>";
-  shownCount = Math.min(PAGE, list.length);
+  // 换筛选条件后停留在旧页码会看到一页空白，所以列表输入一变就回到第 1 页。
+  // 逐项改写每个入口太散，这里按输入签名判定。
+  const sig = JSON.stringify([state.tab, state.q, state.cat, state.sort, state.dir, state.since, state.src, [...state.filters], !!state.dshVer]);
+  if (sig !== lastListSig){ state.page = 1; lastListSig = sig; }
+  const pages = Math.max(1, Math.ceil(list.length / state.perPage));
+  if (state.page > pages) state.page = pages;
+  if (state.page < 1) state.page = 1;
   draw(list);
+  renderPager(list.length, pages);
   document.getElementById("count-line").style.display = "block";
   let extra = "";
   if (isBrowse && state.dshVer) extra = ` · 已按 DSH ${esc(state.dshVer)} 兼容过滤`;
-  document.getElementById("count-line").textContent = `显示 ${shownCount} / ${list.length} 个插件${extra}`;
-  document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
+  const from = list.length ? (state.page - 1) * state.perPage + 1 : 0;
+  const to = Math.min(state.page * state.perPage, list.length);
+  document.getElementById("count-line").textContent = `第 ${from}–${to} 个 / 共 ${list.length} 个插件${extra}`;
   if (state.tab==="theme"){
     document.getElementById("note-line").style.display = "block";
     document.getElementById("note-line").textContent = "主题页展示「界面增强」分类与 theme/appearance 标签的插件，共 " + list.length + " 个";
@@ -902,13 +928,77 @@ function opsHtml(p){
     <button class="op danger${blocked.has(p.name)?" on":""}" data-op="blocked" data-n="${esc(p.name)}" title="屏蔽">🚫</button>
   </div>`;
 }
+/* ---------- 分页 ---------- */
+function pageWindow(cur, total){
+  // 首尾恒显，当前页左右各带一页，其余用 … 省略
+  const keep = new Set([1, total, cur, cur-1, cur+1]);
+  const out = [];
+  let prev = 0;
+  for (const n of [...keep].filter(x => x >= 1 && x <= total).sort((a,b)=>a-b)){
+    if (prev && n - prev > 1) out.push("…");
+    out.push(n);
+    prev = n;
+  }
+  return out;
+}
+function pagerHtml(pages){
+  if (pages <= 1) return "";
+  const cur = state.page;
+  const btns = pageWindow(cur, pages).map(x =>
+    x === "…" ? `<span class="pg-gap">…</span>`
+              : `<button class="pg-btn${x===cur?" on":""}" data-pg="${x}"${x===cur?" disabled":""}>${x}</button>`
+  ).join("");
+  const opts = PER_PAGE_CHOICES.map(n => `<option value="${n}"${n===state.perPage?" selected":""}>${n}</option>`).join("");
+  return `<button class="pg-btn" data-pg="prev"${cur<=1?" disabled":""}>‹ 上一页</button>${btns}`
+       + `<button class="pg-btn" data-pg="next"${cur>=pages?" disabled":""}>下一页 ›</button>`
+       + `<span class="pg-info">第 ${cur} / ${pages} 页</span>`
+       + `<span class="pg-size">每页 <select data-pg="size" title="每页显示多少个">${opts}</select></span>`;
+}
+function renderPager(total, pages){
+  const html = pagerHtml(pages);
+  for (const id of ["pager-top", "pager-bottom"]){
+    const el = document.getElementById(id);
+    el.innerHTML = html;
+    if (!html) continue;
+    el.querySelectorAll("[data-pg]").forEach(b => {
+      if (b.tagName === "SELECT") return;
+      b.onclick = () => {
+        const v = b.dataset.pg;
+        const next = v === "prev" ? state.page - 1 : v === "next" ? state.page + 1 : +v;
+        if (next === state.page || next < 1 || next > pages) return;
+        state.page = next;
+        render();
+        scrollTopOfList();
+      };
+    });
+    const sel = el.querySelector('select[data-pg="size"]');
+    if (sel) sel.onchange = () => {
+      const n = +sel.value;
+      if (!PER_PAGE_CHOICES.includes(n)) return;
+      // 换每页条数时尽量停在正在看的条目附近，否则一律被弹回第 1 页
+      const firstVisible = (state.page - 1) * state.perPage;
+      state.perPage = n;
+      localStorage.setItem("dsh-perpage", String(n));
+      state.page = Math.min(pages, Math.floor(firstVisible / n) + 1) || 1;
+      render();
+      scrollTopOfList();
+    };
+  }
+}
+function scrollTopOfList(){
+  const anchor = document.getElementById("count-line");
+  const y = anchor ? anchor.getBoundingClientRect().top + window.scrollY - 64 : 0;
+  window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
+}
 function draw(list){
   const rowsEl = document.getElementById("rows");
   const gridEl = document.getElementById("grid");
-  rowsEl.style.display = state.view==="row" ? "flex" : "none";
-  gridEl.style.display = state.view==="card" ? "grid" : "none";
+  rowsEl.style.display = state.view==="row" ? "flex" : "none";  gridEl.style.display = state.view==="card" ? "grid" : "none";
   let rh="", gh="";
-  for (let i=0;i<shownCount;i++){
+  // data-i 用的是全列表的绝对下标，点击处仍按 list[i] 取值，翻页不影响取数
+  const start = (state.page - 1) * state.perPage;
+  const end = Math.min(start + state.perPage, list.length);
+  for (let i=start;i<end;i++){
     const p = list[i];
     const instBtn = mainBtnHtml(p, i);
     const desc = p.desc || p.descEn || "无描述";
@@ -1220,7 +1310,8 @@ function buildIssueUrl(){
 function renderAdvanced(){
   document.getElementById("rows").style.display = "none";
   document.getElementById("grid").style.display = "none";
-  document.getElementById("more").style.display = "none";
+  document.getElementById("pager-top").innerHTML = "";
+  document.getElementById("pager-bottom").innerHTML = "";
   document.getElementById("count-line").style.display = "none";
   document.getElementById("note-line").style.display = "none";
   document.getElementById("empty").style.display = "none";
@@ -1402,14 +1493,6 @@ document.querySelectorAll("#quick-filters .fchip").forEach(b=>b.onclick=()=>{
   b.classList.toggle("on", state.filters.has(f));
   render();
 });
-document.getElementById("more").onclick = ()=>{
-  const list = filtered();
-  shownCount = Math.min(shownCount + PAGE, list.length);
-  draw(list);
-  let extra = (state.tab==="discover"||state.tab==="theme") && state.dshVer ? ` · 已按 DSH ${esc(state.dshVer)} 兼容过滤` : "";
-  document.getElementById("count-line").textContent = `显示 ${shownCount} / ${list.length} 个插件${extra}`;
-  document.getElementById("more").style.display = list.length > shownCount ? "inline-block" : "none";
-};
 document.getElementById("v-row").onclick = ()=>setView("row");
 document.getElementById("v-card").onclick = ()=>setView("card");
 function syncViewBtns(){
