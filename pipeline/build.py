@@ -355,6 +355,7 @@ def main():
     # 结果按源文本哈希进 store.db，每日只翻新增。接口是非官方的，任何异常都只
     # 降级成"保留英文"，绝不拖垮整轮构建。
     try:
+        translate.ensure_table(conn)
         pairs = translate.translate_many(
             conn, [t[0] for t in tr_candidates], cap=config.TRANSLATE_MAX)
         done = 0
