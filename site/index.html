@@ -209,6 +209,28 @@
   .dq .cmd{flex:1;font-family:var(--mono);font-size:11.5px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dq .rm{background:none;border:none;color:var(--fg3);cursor:pointer;font-size:15px;line-height:1}
   .dq .rm:hover{color:var(--danger)}
+  /* 任务面板：安装/更新/卸载实时进度。pnpm 的 ndjson 流没有总数，进度条按阶段估算，
+     所以文案写"阶段 + 百分比（估算）"，不要伪装成精确下载进度 */
+  .dock.has-ops .dock-body{max-height:min(46vh,420px)}
+  .dock-sec{padding:6px 16px 2px;font-size:11px;color:var(--fg3);letter-spacing:.4px;background:var(--bg2);position:sticky;top:0;border-bottom:1px solid var(--line)}
+  .op{display:flex;align-items:center;gap:9px;padding:7px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .op:last-child{border-bottom:none}
+  .op .kind{flex-shrink:0;width:16px;text-align:center}
+  .op .nm{font-family:var(--mono);font-weight:600;flex-shrink:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .op .bar{flex:1;height:6px;border-radius:4px;background:var(--line);overflow:hidden;min-width:60px}
+  .op .bar i{display:block;height:100%;background:var(--accent);transition:width .3s ease}
+  .op.running .bar i{background:linear-gradient(90deg,var(--accent),#3fb8a8)}
+  .op.done .bar i{background:#2fa36b}
+  .op.failed .bar i{background:var(--danger)}
+  .op .st{flex-shrink:0;font-size:11.5px;color:var(--fg3);min-width:96px;text-align:right}
+  .op.failed .st{color:var(--danger)}
+  .op.done .st{color:#2fa36b}
+  .op .retry{flex-shrink:0;background:none;border:1px solid var(--line2);border-radius:6px;color:var(--fg2);font-size:11.5px;padding:2px 8px;cursor:pointer}
+  .op .retry:hover{border-color:var(--accent);color:var(--accent)}
+  .op-err{padding:0 16px 8px 41px;font-size:11.5px;color:var(--danger);line-height:1.5;word-break:break-word}
+  .op-err b{color:var(--fg2);font-weight:600}
+  .op-err code{font-family:var(--mono);font-size:11px;color:var(--fg3)}
+  .op-note{padding:0 16px 8px 41px;font-size:11.5px;color:var(--fg3)}
 
   /* ---------- 筛选面板 ---------- */
   .panel-mask{position:fixed;inset:0;background:rgba(23,35,55,.32);display:none;z-index:80}
@@ -380,6 +402,7 @@
 <div class="dock" id="dock">
   <div class="dock-head" onclick="toggleDock()">
     <span class="ttl">⤓ 待安装<span class="n" id="qcnt">0</span></span>
+    <span class="ttl ops-ttl" id="ops-ttl" style="display:none">· 任务<span class="n" id="opcnt">0</span></span>
     <span style="font-size:11px;color:var(--fg3)" id="qhint">点插件上的 ⤓ 加入待装清单，一起复制安装命令</span>
     <span class="spacer"></span>
     <button class="copyall" id="copy-all" onclick="copyAllQueue(event)">复制全部命令</button>
@@ -578,37 +601,28 @@ async function probeHost(){
     if (qh) qh.textContent = "点插件上的 ⤓ 加入待装清单，一起真实安装";
   } catch(e){ HOST = null; }
 }
+/* ---------- 任务面板：安装 / 更新 / 卸载实时进度 ----------
+   宿主把 CLI 串行排队，并把 pnpm 的 ndjson 事件汇成任务状态；前端提交后
+   立刻在面板占一行（点下去就要看得见东西），再轮 api/tasks 收敛。
+   pnpm 的流里没有"总数"，百分比按阶段估算，界面文案也这么写，不伪装精确进度。 */
+let ops = [];            // 服务端任务（权威，新的在前）
+let pendingOps = [];     // 已提交、服务端还没回带的本地行
+let opLocalSeq = 0;
+let opTimer = null;
+const opPrev = new Map();
+let opDoneCount = 0, opFailCount = 0;
+
+const OP_ICON = { install: "⤓", update: "🔄", uninstall: "🗑" };
+
 /* 宿主 API 载荷：git 源必须带完整 owner/repo，name 同时给出便于回显 */
 function hostPayload(p){
   return p.source==="git"
     ? {source:"github", repo:p.repo, name:p.name}
     : {source:"npm", name:p.name};
 }
-async function hostInstall(p, btn){
-  const old = btn ? btn.textContent : "";
-  if (btn){ btn.textContent = "安装中…"; btn.disabled = true; }
-  try {
-    const r = await apiFetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
-    const d = await r.json().catch(()=>({}));
-    if (d.ok){ await refreshInstalled(); toast("✓ 已安装 " + p.name); buildTabbar(); render(); }
-    else toast("✗ 安装失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
-  } catch(e){ toast("✗ 安装失败：" + e.message); }
-  if (btn){ btn.textContent = old; btn.disabled = false; }
-}
-async function hostUninstall(p){
-  const key = depKeyOf(p);
-  const shown = (p && p.name) || key;
-  if (!confirm("确认从 DSH 卸载「" + shown + "」？" + (key !== shown ? "（本机依赖键 " + key + "）" : ""))) return;
-  try {
-    const r = await apiFetch("api/uninstall", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:key})});
-    const d = await r.json().catch(()=>({}));
-    if (d.ok){ await refreshInstalled(); toast("✓ 已卸载 " + shown); buildTabbar(); render(); }
-    else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
-  } catch(e){ toast("✗ 卸载失败：" + e.message); }
-}
 /* 更新载荷必须显式带目标版本：pnpm 对已装的包执行 `add <pkg>`（不带 spec）会回
-   "Already up to date" 且退出码 0，我们曾据此报「✓ 更新完成」而版本根本没动 ——
-   用户说的"更新没反应"就是这么来的。npm 源统一 @版本，目录没给版本才 @latest。 */
+   "Already up to date" 且退出码 0，据此报「✓ 更新完成」而版本根本没动。
+   npm 源统一 @版本，目录没给版本才 @latest。 */
 function hostUpdatePayload(p){
   const base = hostPayload(p);
   const want = updateTargetOf(p);
@@ -616,47 +630,126 @@ function hostUpdatePayload(p){
   else if (want) base.ref = want;
   return base;
 }
-async function hostUpdateAll(upd){
-  let ok = 0, same = 0, fail = 0;
-  for (let i=0;i<upd.length;i++){
-    const p = upd[i];
-    toast(`正在更新 ${i+1}/${upd.length}：${p.name}…`);
-    try {
-      const r = await apiFetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostUpdatePayload(p))});
-      const d = await r.json().catch(()=>({}));
-      if (!r.ok || !d.ok) fail++;
-      else if (d.changed === false) same++;
-      else ok++;
-    } catch(e){ fail++; }
+function opBody(kind, p){
+  if (kind === "uninstall") return { name: depKeyOf(p) };
+  return kind === "update" ? hostUpdatePayload(p) : hostPayload(p);
+}
+
+async function submitOp(kind, p){
+  const row = { id: "L" + (++opLocalSeq), kind, name: (p && p.name) || String(p),
+                state: "queued", phaseText: "提交中", percent: 3 };
+  pendingOps.push(row);
+  document.getElementById("dock").classList.add("open");
+  renderDock();
+  try {
+    const r = await apiFetch("api/" + kind, { method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(opBody(kind, p)) });
+    const d = await r.json().catch(()=>({}));
+    if (d && d.accepted && d.taskId) row.serverId = d.taskId;
+    else {
+      row.state = "failed"; row.phaseText = "提交失败";
+      row.error = String(d.error || ("HTTP " + r.status));
+      row.hint = d.hint || "";
+      opFailCount++;
+    }
+  } catch(e){
+    row.state = "failed"; row.phaseText = "提交失败";
+    row.error = String((e && e.message) || e);
+    opFailCount++;
   }
-  const parts = [];
-  if (ok) parts.push(`升级 ${ok} 个`);
-  if (same) parts.push(`${same} 个已是最新`);
-  if (fail) parts.push(`失败 ${fail} 个`);
-  toast((ok || same ? "✓ 更新完成：" : "✗ 更新失败：") + (parts.join("，") || "无变化"));
-  await refreshInstalled(); buildTabbar(); render();
+  renderDock();
+  pollOps();
+}
+
+function allRows(){
+  const known = new Set(ops.map(t => t.id));
+  return ops.concat(pendingOps.filter(r => !r.serverId || !known.has(r.serverId)));
+}
+function activeCount(){
+  return ops.filter(t => t.state === "queued" || t.state === "running").length +
+         pendingOps.filter(t => t.state === "queued").length;
+}
+function pollOps(){
+  if (opTimer) return;
+  opTimer = setTimeout(async ()=>{
+    opTimer = null;
+    try {
+      const r = await apiFetch("api/tasks");
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d.tasks)) {
+          ops = d.tasks.slice().reverse();
+          const serverIds = new Set(ops.map(t => t.id));
+          for (const t of ops) {
+            const prev = opPrev.get(t.id);
+            if (prev === t.state) continue;
+            opPrev.set(t.id, t.state);
+            if (opPrev.size > 400) opPrev.delete(opPrev.keys().next().value);
+            if (t.state === "done") opDoneCount++;
+            else if (t.state === "failed") opFailCount++;
+          }
+          pendingOps = pendingOps.filter(x => !x.serverId || !serverIds.has(x.serverId));
+        }
+      }
+    } catch(e){ /* 宿主忙或断连，下一轮再试 */ }
+    renderDock();
+    if (activeCount() > 0) { pollOps(); return; }
+    if (opDoneCount || opFailCount) {
+      const dn = opDoneCount, fl = opFailCount;
+      opDoneCount = 0; opFailCount = 0;
+      await refreshInstalled();
+      buildTabbar(); draw(filtered());
+      toast((fl ? "✗ " : "✓ ") + "任务结束：完成 " + dn + " 个" +
+            (fl ? "，失败 " + fl + " 个（原因见任务面板）" : ""));
+    }
+  }, 700);
+}
+
+function opRowHtml(t){
+  const pct = Math.max(0, Math.min(100, Number(t.percent) || 0));
+  let st;
+  if (t.state === "done") st = (t.changed === false) ? "已是最新" : (t.to ? "完成 → v" + t.to : "完成");
+  else if (t.state === "failed") st = t.phaseText || "失败";
+  else if (t.state === "running") st = (t.phaseText || "进行中") + " " + pct + "%";
+  else st = t.phaseText || "排队中";
+  const retry = t.state === "failed"
+    ? `<button class="retry" data-retry="${esc(String(t.name))}" data-kind="${esc(t.kind)}">重试</button>` : "";
+  let html = `<div class="op ${esc(t.state)}"><span class="kind">${OP_ICON[t.kind] || "•"}</span>` +
+    `<span class="nm" title="${esc(String(t.name))}">${esc(String(t.name))}</span>` +
+    `<span class="bar"><i style="width:${pct}%"></i></span><span class="st">${esc(st)}</span>${retry}</div>`;
+  if (t.state === "failed") {
+    html += `<div class="op-err"><b>${esc(t.error || "执行失败")}</b>` +
+      (t.hint ? "：" + esc(t.hint) : "") +
+      (t.detail ? `<br>${esc(t.detail)}` : "") +
+      (t.logFile ? `<br><code>${esc(t.logFile)}</code>` : "") + `</div>`;
+  } else if (t.state === "done" && t.note) {
+    html += `<div class="op-note">${esc(t.note)}</div>`;
+  }
+  return html;
+}
+
+async function hostInstall(p, btn){
+  if (btn){ btn.textContent = "已提交"; btn.disabled = true; }
+  submitOp("install", p);
+}
+async function hostUninstall(p){
+  const key = depKeyOf(p);
+  const shown = (p && p.name) || key;
+  if (!confirm("确认从 DSH 卸载「" + shown + "」？" + (key !== shown ? "（本机依赖键 " + key + "）" : ""))) return;
+  submitOp("uninstall", p);
 }
 async function hostUpdateOne(p, btn){
-  const old = btn ? btn.textContent : "";
-  if (btn){ btn.textContent = "更新中…"; btn.disabled = true; }
-  await hostUpdateAll([p]);
-  if (btn){ btn.textContent = old; btn.disabled = false; }
+  if (btn){ btn.textContent = "已提交"; btn.disabled = true; }
+  submitOp("update", p);
+}
+async function hostUpdateAll(upd){
+  for (const p of upd) submitOp("update", p);
 }
 async function hostInstallAll(qlist){
-  let ok = 0, fail = 0;
-  for (let i=0;i<qlist.length;i++){
-    const p = qlist[i];
-    toast(`正在安装 ${i+1}/${qlist.length}：${p.name}…`);
-    try {
-      const r = await apiFetch("api/install", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
-      const d = await r.json().catch(()=>({}));
-      if (d.ok){ ok++; queue.delete(p.name); }
-      else fail++;
-    } catch(e){ fail++; }
-  }
-  await refreshInstalled(); save("dsh-queue", queue);
-  toast(ok>0 ? `✓ 安装完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部安装失败");
-  buildTabbar(); render(); renderDock();
+  for (const p of qlist) submitOp("install", p);
+  qlist.forEach(p=>queue.delete(p.name));
+  save("dsh-queue", queue);
+  renderDock();
 }
 
 function save(key, set){ localStorage.setItem(key, JSON.stringify([...set])); }
@@ -1430,15 +1523,38 @@ document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) do
 /* ---------- 待装栏 ---------- */
 function renderDock(){
   document.getElementById("qcnt").textContent = queue.size;
+  const rows = allRows();
+  const dock = document.getElementById("dock");
+  dock.classList.toggle("has-ops", rows.length > 0);
+  const ttl = document.getElementById("ops-ttl");
+  if (ttl) ttl.style.display = rows.length ? "" : "none";
+  const oc = document.getElementById("opcnt");
+  if (oc) { const act = activeCount(); oc.textContent = act ? String(act) : String(rows.length); }
   const body = document.getElementById("dock-body");
+  let html = "";
+  if (rows.length){
+    html += `<div class="dock-sec">任务 · 安装/更新/卸载实时进度（百分比按 pnpm 阶段估算）</div>`;
+    html += rows.map(opRowHtml).join("");
+  }
+  html += `<div class="dock-sec">待装清单</div>`;
   if (queue.size){
     const qlist = DATA.plugins.filter(p=>queue.has(p.name));
-    body.innerHTML = qlist.map(p=>`<div class="dq"><span class="nm">${esc(p.name)}</span><span class="cmd">${esc(p.install||"待补 commit")}</span><button class="rm" data-q="${esc(p.name)}" title="移除">✕</button></div>`).join("");
-    body.querySelectorAll(".rm").forEach(b=>b.onclick=e=>{
-      e.stopPropagation();
-      queue.delete(b.dataset.q); save("dsh-queue", queue); renderDock(); if(state.tab!=="submit"&&state.tab!=="advanced") draw(filtered());
-    });
-  } else body.innerHTML = `<div class="dq" style="color:var(--fg3)">清单为空：在插件上点 ⤓ 加入待装</div>`;
+    html += qlist.map(p=>`<div class="dq"><span class="nm">${esc(p.name)}</span><span class="cmd">${esc(p.install||"待补 commit")}</span><button class="rm" data-q="${esc(p.name)}" title="移除">✕</button></div>`).join("");
+  } else {
+    html += `<div class="dq" style="color:var(--fg3)">清单为空：在插件上点 ⤓ 加入待装</div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll(".rm").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    queue.delete(b.dataset.q); save("dsh-queue", queue); renderDock();
+    if(state.tab!=="submit"&&state.tab!=="advanced") draw(filtered());
+  });
+  body.querySelectorAll(".retry").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const name = b.dataset.retry, kind = b.dataset.kind;
+    const p = (DATA && DATA.plugins ? DATA.plugins : []).find(x=>x.name===name) || { name };
+    submitOp(kind, p);
+  });
 }
 function toggleDock(){
   document.getElementById("dock").classList.toggle("open");
