@@ -37,6 +37,10 @@ GIT_COMMIT_BATCH_TOKEN = 2000
 # npm 下载量（近30天）单轮补齐上限（GitHub Actions runner 对 npm API 限流较严，用小批量防超时）
 NPM_DL_BATCH = 800
 
+# 描述机翻单轮上限。首轮把存量英文描述一次翻完（约 16k 条 / 20 条一批 ≈ 800 次请求，
+# 十几分钟）；之后每天只有新增条目要翻，这个值就当保险丝用。设 0 可整步关闭机翻。
+TRANSLATE_MAX = int(os.environ.get("TRANSLATE_MAX", "20000"))
+
 # git 更新检测：每轮刷新 git_latest_commit 的仓库数（按 stars 降序轮转，7 天内已探测的跳过）。
 # 规模要和 7 天窗口配套：库内约 1.4 万个 git 仓库，500/轮 × 7 天 = 3,500 只能覆盖头部，
 # 长尾依旧饿死；2,000/轮 × 7 天 ≈ 全量转一圈。

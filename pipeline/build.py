@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
 from db import ensure_schema, load_icon_maps
+import translate
 
 NPM_REGISTRY = "https://registry.npmjs.org"
 NPM_MIRROR = "https://registry.npmmirror.com"
@@ -190,6 +191,7 @@ def main():
     skipped_git_nocommit = 0
     dup = 0
     qualified = 0
+    tr_candidates = []   # (英文原文, site 条目引用, index 条目引用)，组装完统一机翻
     downloads_map = load_downloads(conn)
     probe_map = load_icon_probe(conn)
     dshopen_maps, awesome_maps = load_icon_maps()
@@ -343,6 +345,29 @@ def main():
             "dsh": dsh_str, "latestVersion": latest_version, "hasUpdate": bool(has_update),
         })
         cat_stats[cat_key] = cat_stats.get(cat_key, 0) + 1
+        # 最终展示的描述里没有中文、又有英文原文可翻的，才进机翻队列
+        if desc_en and not translate.has_cjk(desc_zh or desc_en or ""):
+            tr_candidates.append((desc_en, site_plugins[-1], entry))
+
+    # ---- 描述机翻（中文优先）----
+    # 六成条目只有英文描述，中文用户浏览吃力。这里把没有中文的描述批量机翻进
+    # site 的 desc 与索引的 description.zh，原文留在 descEn / description.en。
+    # 结果按源文本哈希进 store.db，每日只翻新增。接口是非官方的，任何异常都只
+    # 降级成"保留英文"，绝不拖垮整轮构建。
+    try:
+        pairs = translate.translate_many(
+            conn, [t[0] for t in tr_candidates], cap=config.TRANSLATE_MAX)
+        done = 0
+        for src, site_entry, index_entry in tr_candidates:
+            zh = pairs.get(src)
+            if not zh:
+                continue
+            site_entry["desc"] = zh
+            index_entry["description"]["zh"] = zh
+            done += 1
+        print(f"[build] 描述中文化：{done}/{len(tr_candidates)} 条待翻条目已有中文")
+    except Exception as e:
+        print(f"[build] 描述机翻整步跳过（保留英文原文）：{type(e).__name__} {e}")
 
     # ---- format-1 索引 ----
     categories_meta = {}

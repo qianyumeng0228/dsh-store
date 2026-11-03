@@ -243,6 +243,12 @@
   .lang-switch{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden;margin-bottom:12px;width:fit-content}
   .lang-switch button{background:#fff;border:none;padding:4px 14px;font-size:12px;color:var(--fg2);cursor:pointer}
   .lang-switch button.on{background:var(--accent);color:#fff}
+  .lang-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .lang-row .lang-switch{margin-bottom:0}
+  .lang-tr{background:#fff;border:1px solid var(--line2);border-radius:7px;padding:4px 11px;font-size:12px;color:var(--fg2);cursor:pointer}
+  .lang-tr:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  .lang-tr:disabled{opacity:.6;cursor:default}
+  .lang-note{font-size:11px;color:var(--fg3)}
   .m-desc{font-size:13.5px;color:var(--fg);white-space:pre-wrap;margin-bottom:14px;line-height:1.65}
   .m-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
   .m-cell{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
@@ -323,7 +329,7 @@
       <div class="stat">可装 <b class="ok" id="st-ok">-</b></div>
       <div class="stat">新增 <b id="st-new">-</b></div>
       <div class="stat">更新 <b id="st-upd" style="font-size:11px">-</b></div>
-      <button class="cp" id="btn-allupd" title="只处理「已安装且检测到新版本」的插件：静态站复制更新命令清单，宿主模式逐个真实更新">🔄 全部更新 <b id="st-upd2">0</b></button>
+      <button class="cp" id="btn-allupd" title="只处理「本机已装且版本低于目录/registry 最新版」的插件：静态站复制带版本的更新命令，宿主模式逐个真实升级（本地链接依赖不参与）">🔄 全部更新 <b id="st-upd2">0</b></button>
     </div>
   </div>
   <div class="idxbar"><div class="in">
@@ -415,7 +421,10 @@
         <div class="m-author" id="m-author"></div>
       </div>
     </div>
-    <div class="lang-switch"><button id="l-zh" class="on">中文</button><button id="l-en">English</button></div>
+    <div class="lang-row">
+      <div class="lang-switch" id="lang-switch" style="display:none"><button id="l-zh" class="on">中文</button><button id="l-en">English</button></div>
+      <button id="l-tr" class="lang-tr" style="display:none" title="调用在线机器翻译，把英文描述译成中文并缓存">🌐 译成中文</button>
+    </div>
     <div class="m-desc" id="m-desc"></div>
     <div class="m-meta" id="m-meta"></div>
     <div id="m-install"></div>
@@ -430,7 +439,7 @@
 const PER_PAGE_CHOICES = [24, 48, 96];
 const IN_FRAME = (()=>{ try { return window.self !== window.top } catch(e){ return true } })();
 if (IN_FRAME) document.documentElement.classList.add("inframe");
-let DATA = null, curPlugin = null, modalLang = "zh", lastListSig = "";
+let DATA = null, curPlugin = null, modalLang = "zh", modalTr = "", lastListSig = "";
 const state = { tab:"discover", q:"", cat:"all", sort:"stars", dir:"desc", since:"all", src:"all",
                 filters:new Set(), view: localStorage.getItem("dsh-view") || (IN_FRAME?"card":"row"),
                 dshVer: localStorage.getItem("dsh-dshver") || "",
@@ -447,6 +456,46 @@ let blocked = new Set(JSON.parse(localStorage.getItem("dsh-blocked")||"[]"));
 let queue = new Set(JSON.parse(localStorage.getItem("dsh-queue")||"[]"));
 let installedRepos = new Set();   // 宿主模式：本机已装 git 插件的 owner/repo（小写）
 let installedDetails = [];        // 宿主模式：本机依赖明细，卸载时要按真实依赖键来
+/* ---------- 本机可更新判定 ----------
+   目录里的 hasUpdate 说的是「本站收录版本落后于 registry latest」，跟本机装的
+   什么版本无关：装了 1.14.16、目录已经 1.17.2 的插件 hasUpdate 反而是 false，
+   用户点更新被告知"没有可更新的"。可更新必须按「本机版本 < 目标版本」判。 */
+const CJK_RE = /[\u4e00-\u9fff]/;
+function hasCJK(s){ return CJK_RE.test(String(s||"")); }
+/* 描述中文优先：机翻后 desc 是中文、descEn 是原文；老快照里 desc 可能仍是英文，
+   那就退回 descEn，不拿英文冒充中文档 */
+function pickDesc(p){ if (!p) return ""; return hasCJK(p.desc) ? p.desc : (p.descEn || p.desc || ""); }
+function zhDesc(p){ return (p && hasCJK(p.desc)) ? p.desc : ""; }
+function normVer(v){ return String(v||"").replace(/^[\^~>=<\s]+/,"").trim(); }
+/* 非 registry 装的依赖绝不自动重装：file:/link:/workspace: 是本地开发链，
+   用 npm 版覆盖会直接毁掉用户自己的改动 */
+const NON_REGISTRY_RE = /^(file:|link:|workspace:|git\+|github:|https?:|ssh:)/i;
+function installedSpecOf(p){
+  const repo = p && p.repo ? String(p.repo).toLowerCase() : "";
+  const d = installedDetails.find(x => x && (x.name === (p && p.name) ||
+    (repo && x.repo && String(x.repo).toLowerCase() === repo)));
+  return d ? String(d.version || "") : "";
+}
+function verCmp(a, b){
+  const pa = normVer(a).split(/[.\-+]/), pb = normVer(b).split(/[.\-+]/);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++){
+    const x = pa[i] || "0", y = pb[i] || "0";
+    if (/^\d+$/.test(x) && /^\d+$/.test(y)){ if (+x !== +y) return +x - +y; }
+    else if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+function updateTargetOf(p){ return normVer(p.latestVersion || p.version); }
+function updateAvailable(p){
+  if (!HOST || !p || p.localOnly || !isInstalled(p)) return false;
+  const cur = installedSpecOf(p);
+  if (!cur || NON_REGISTRY_RE.test(cur)) return false;
+  const want = updateTargetOf(p);
+  if (!want) return false;
+  // git 源的"版本"可能是 commit：语义化比较没意义，只能判"不一样就重装到最新"
+  if (p.source === "git" || !/^\d/.test(normVer(cur))) return normVer(cur) !== want;
+  return verCmp(cur, want) < 0;
+}
 /* 目录里的展示名对 git 插件可能带 owner- 前缀，本机依赖键却是包名，故两个都要比 */
 function isInstalled(p){ return installed.has(p.name) || (!!p.repo && installedRepos.has(String(p.repo).toLowerCase())); }
 /* 卸载要用本机真实依赖键：git 插件装进 package.json 的键是它自己的包名，
@@ -490,8 +539,8 @@ function mainBtnHtml(p, i){
   if (!HOST)
     return `<button class="install-btn done" data-inst="${i}" data-act="unmark" title="目录站读不到本机状态，这是手动标记">取消标记</button>`;
   const acts = [];
-  if (p.hasUpdate) acts.push(`<button class="install-btn upd" data-inst="${i}" data-act="update" title="重装到最新版（npm latest / 默认分支最新提交）">更新</button>`);
-  acts.push(`<button class="install-btn danger${p.hasUpdate?" mini":""}" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`);
+  if (updateAvailable(p)) acts.push(`<button class="install-btn upd" data-inst="${i}" data-act="update" title="升级到 v${esc(updateTargetOf(p))}（本机 ${esc(normVer(installedSpecOf(p)) || "未知")}）">更新</button>`);
+  acts.push(`<button class="install-btn danger${updateAvailable(p)?" mini":""}" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`);
   return `<div class="btns">${acts.join("")}</div>`;
 }
 
@@ -557,18 +606,34 @@ async function hostUninstall(p){
     else toast("✗ 卸载失败：" + ((d.output||d.error||"未知错误").slice(0,120)));
   } catch(e){ toast("✗ 卸载失败：" + e.message); }
 }
+/* 更新载荷必须显式带目标版本：pnpm 对已装的包执行 `add <pkg>`（不带 spec）会回
+   "Already up to date" 且退出码 0，我们曾据此报「✓ 更新完成」而版本根本没动 ——
+   用户说的"更新没反应"就是这么来的。npm 源统一 @版本，目录没给版本才 @latest。 */
+function hostUpdatePayload(p){
+  const base = hostPayload(p);
+  const want = updateTargetOf(p);
+  if (base.source === "npm") base.version = want || "latest";
+  else if (want) base.ref = want;
+  return base;
+}
 async function hostUpdateAll(upd){
-  let ok = 0, fail = 0;
+  let ok = 0, same = 0, fail = 0;
   for (let i=0;i<upd.length;i++){
     const p = upd[i];
     toast(`正在更新 ${i+1}/${upd.length}：${p.name}…`);
     try {
-      const r = await apiFetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostPayload(p))});
+      const r = await apiFetch("api/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(hostUpdatePayload(p))});
       const d = await r.json().catch(()=>({}));
-      if (d.ok) ok++; else fail++;
+      if (!r.ok || !d.ok) fail++;
+      else if (d.changed === false) same++;
+      else ok++;
     } catch(e){ fail++; }
   }
-  toast(ok>0 ? `✓ 更新完成：成功 ${ok} 个${fail?`，失败 ${fail} 个`:""}` : "✗ 全部更新失败");
+  const parts = [];
+  if (ok) parts.push(`升级 ${ok} 个`);
+  if (same) parts.push(`${same} 个已是最新`);
+  if (fail) parts.push(`失败 ${fail} 个`);
+  toast((ok || same ? "✓ 更新完成：" : "✗ 更新失败：") + (parts.join("，") || "无变化"));
   await refreshInstalled(); buildTabbar(); render();
 }
 async function hostUpdateOne(p, btn){
@@ -825,7 +890,7 @@ function daysSince(d){
 /* ---------- 标签页 ---------- */
 function refreshUpdBadge(){
   if (!DATA) return;
-  document.getElementById("st-upd2").textContent = DATA.plugins.filter(p=>p.hasUpdate && isInstalled(p)).length;
+  document.getElementById("st-upd2").textContent = DATA.plugins.filter(updateAvailable).length;
 }
 function buildTabbar(){
   refreshUpdBadge();
@@ -880,7 +945,7 @@ function filtered(){
       if (f==="inst") list = list.filter(p=>p.installable);
       if (f==="off") list = list.filter(p=>p.official);
       if (f==="new") list = list.filter(isNew);
-      if (f==="update") list = list.filter(p=>p.hasUpdate);
+      if (f==="update") list = list.filter(p => HOST ? updateAvailable(p) : p.hasUpdate);
       if (f==="fav") list = list.filter(p=>favs.has(p.name));
       if (f==="installed") list = list.filter(isInstalled);
     }
@@ -985,6 +1050,10 @@ function iconHtml(p, sm){
   return `<img class="picon${sm?" sm":""}" src="${esc(p.icon)}" alt="" loading="lazy" onerror="this.remove()">`;
 }
 function updBadge(p){
+  /* 宿主模式按本机版本差出徽标；目录收录新不新对已经装好的人没意义 */
+  if (HOST) return updateAvailable(p)
+    ? `<span class="badge upd" title="本机 ${esc(normVer(installedSpecOf(p))||"未知")} → v${esc(updateTargetOf(p))}">🔄 可升级 v${esc(updateTargetOf(p))}</span>`
+    : "";
   if (!p.hasUpdate) return "";
   if (p.source==="git") return `<span class="badge upd" title="上游有新提交">🔄 有新提交</span>`;
   if (p.latestVersion) return `<span class="badge upd" title="与本站收录相比有新版本">🔄 有新版本 v${esc(p.latestVersion)}</span>`;
@@ -998,7 +1067,7 @@ function badges(p){
   if (isNew(p)) h += `<span class="badge new">新增</span>`;
   h += updBadge(p);
   if (isInstalled(p)) h += `<span class="badge inst">已安装</span>`;
-  if (state.tab==="installed" && p.hasUpdate) h += `<span class="badge upd2">可更新</span>`;
+  if (state.tab==="installed" && (HOST ? updateAvailable(p) : p.hasUpdate)) h += `<span class="badge upd2">可更新</span>`;
   if (p.version) h += `<span class="badge ver">v${esc(p.version)}</span>`;
   if (p.source==="npm" && p.downloads) h += `<span class="badge dl">↓ ${fmtN(p.downloads)}</span>`;
   return h;
@@ -1095,7 +1164,7 @@ function draw(list){
   for (let i=start;i<end;i++){
     const p = list[i];
     const instBtn = mainBtnHtml(p, i);
-    const desc = p.desc || p.descEn || "无描述";
+    const desc = pickDesc(p) || "无描述";
     const verLine = p.verified ? `<span class="vf">${esc(p.verified)}</span>` : "";
     rh += `<div class="row" data-i="${i}">
       <div class="row-main">
@@ -1197,6 +1266,8 @@ function renderHScroll(){
 /* ---------- 详情 ---------- */
 function openModalByPlugin(p){
   curPlugin = p;
+  modalTr = "";      // 上一个插件的机翻结果不能串进新弹窗
+  modalLang = "zh";  // 中文用户优先看中文
   if (!p) return;
   const avaEl = document.getElementById("m-ava");
   if (p.icon){
@@ -1232,7 +1303,11 @@ function openModalByPlugin(p){
     <div class="m-cell"><div class="k">DSH 适配</div><div class="v" style="font-family:var(--mono);font-size:12px">${p.dsh?esc(p.dsh):"未声明"}</div></div>
     <div class="m-cell"><div class="k">可安装</div><div class="v">${p.installable?"✓ 是":"✗ 待补"}</div></div>`;
   if (p.latestVersion){
-    meta = `<div class="m-cell" style="grid-column:1/-1"><div class="k">最新版本${p.hasUpdate?"（有新版本可用）":""}</div><div class="v upd">${p.source==="git"?"commit ":"v"}${esc(p.latestVersion)}</div></div>` + meta;
+    meta = `<div class="m-cell" style="grid-column:1/-1"><div class="k">最新版本${updateAvailable(p)?"（可升级）":""}</div><div class="v upd">${p.source==="git"?"commit ":"v"}${esc(p.latestVersion)}</div></div>` + meta;
+  }
+  if (HOST && isInstalled(p)){
+    const cur = normVer(installedSpecOf(p));
+    meta = `<div class="m-cell" style="grid-column:1/-1"><div class="k">本机已装</div><div class="v">${esc(cur||"未知（非 registry 安装）")}${updateAvailable(p)?` → <span class="upd">v${esc(updateTargetOf(p))}</span>`:""}</div></div>` + meta;
   }
   document.getElementById("m-meta").innerHTML = meta;
   setDesc(p);
@@ -1245,7 +1320,7 @@ function openModalByPlugin(p){
     let btns;
     if (!HOST) btns = `<button id="cp">复制</button>`;
     else if (!on) btns = `<button id="act">安装</button>`;
-    else btns = (p.hasUpdate ? `<button id="act" class="upd">更新</button>` : "")
+    else btns = (updateAvailable(p) ? `<button id="act" class="upd" title="升级到 v${esc(updateTargetOf(p))}">更新</button>` : "")
               + `<button id="un" class="danger">卸载</button>`;
     inst.innerHTML = `<div class="install-box"><code>${esc(p.install)}</code>${btns}</div>`;
     const _cp = document.getElementById("cp"); if (_cp) _cp.onclick = e=>copyText(p.install, e.target, "已复制");
@@ -1262,14 +1337,93 @@ function openModalByPlugin(p){
   document.getElementById("m-tags").innerHTML = (p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   document.getElementById("mask").classList.add("show");
 }
+/* ---------- 描述中文化 ----------
+   desc 优先是中文（每日管道批量机翻）。这里兜两件事：
+   1) 中英切换只在「确实有两种语言」时出现 —— 过去 desc 与 descEn 一字不差
+      （16029 条里 15947 条相同），按钮切了个寂寞，用户以为坏了；
+   2) 存量/新增的纯英文条目给「译成中文」按钮，在线机翻并按原文缓存。
+   接口先 Google（本机经系统代理可达、返回 ACAO:*），失败退 MyMemory（直连可达）。 */
+const TR_CAP = 300;
+function trRead(src){ try { return JSON.parse(localStorage.getItem("dsh-tr")||"{}")[src] || ""; } catch(e){ return ""; } }
+function trWrite(src, zh){
+  try {
+    const m = JSON.parse(localStorage.getItem("dsh-tr")||"{}");
+    m[src] = zh;
+    const ks = Object.keys(m);
+    if (ks.length > TR_CAP) ks.slice(0, ks.length - TR_CAP).forEach(k=>delete m[k]);
+    localStorage.setItem("dsh-tr", JSON.stringify(m));
+  } catch(e){ /* 配额满只丢缓存，本次译文照样显示 */ }
+}
+function abortSig(){
+  try { return (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(9000) : undefined; }
+  catch(e){ return undefined; }
+}
+async function gtxTranslate(src){
+  const r = await fetch("https://translate.googleapis.com/translate_a/single" +
+    "?client=gtx&sl=en&tl=zh-CN&dt=t&q=" + encodeURIComponent(src), { signal: abortSig() });
+  if (!r.ok) throw new Error("Google HTTP " + r.status);
+  const d = await r.json();
+  const zh = (d[0]||[]).map(s=>s&&s[0]).filter(Boolean).join("").trim();
+  if (!zh) throw new Error("Google 空译文");
+  return zh;
+}
+async function myMemoryTranslate(src){
+  const r = await fetch("https://api.mymemory.translated.net/get?q=" +
+    encodeURIComponent(src.slice(0,480)) + "&langpair=en|zh-CN", { signal: abortSig() });
+  if (!r.ok) throw new Error("MyMemory HTTP " + r.status);
+  const d = await r.json();
+  const zh = String((d && d.responseData && d.responseData.translatedText) || "").trim();
+  if (!zh) throw new Error("MyMemory 空译文");
+  return zh;
+}
+async function translateToZh(src){
+  const hit = trRead(src);
+  if (hit) return hit;
+  let zh;
+  try { zh = await gtxTranslate(src); }
+  catch(e){ zh = await myMemoryTranslate(src); }
+  trWrite(src, zh);
+  return zh;
+}
+function descPair(p){
+  const en = p.descEn || (hasCJK(p.desc) ? "" : (p.desc || ""));
+  const zh = zhDesc(p) || (curPlugin === p ? modalTr : "") || (en ? trRead(en) : "");
+  return { zh, en };
+}
 function setDesc(p){
+  const pair = descPair(p);
   const d = document.getElementById("m-desc");
-  d.textContent = modalLang==="zh" ? (p.desc||p.descEn||"无描述") : (p.descEn||p.desc||"No description");
-  document.getElementById("l-zh").classList.toggle("on", modalLang==="zh");
-  document.getElementById("l-en").classList.toggle("on", modalLang==="en");
+  const sw = document.getElementById("lang-switch");
+  const tr = document.getElementById("l-tr");
+  d.textContent = (modalLang === "en" && pair.en) ? pair.en : (pair.zh || pair.en || "无描述");
+  const both = !!(pair.zh && pair.en && pair.zh !== pair.en);
+  sw.style.display = both ? "flex" : "none";
+  if (!pair.zh) modalLang = "en";
+  else modalLang = both ? modalLang : "zh";
+  document.getElementById("l-zh").classList.toggle("on", modalLang === "zh");
+  document.getElementById("l-en").classList.toggle("on", modalLang === "en");
+  tr.style.display = (!pair.zh && pair.en) ? "inline-block" : "none";
+  if (!pair.zh && pair.en) tr.textContent = "🌐 译成中文";
 }
 document.getElementById("l-zh").onclick = ()=>{ modalLang="zh"; if(curPlugin) setDesc(curPlugin); };
 document.getElementById("l-en").onclick = ()=>{ modalLang="en"; if(curPlugin) setDesc(curPlugin); };
+document.getElementById("l-tr").onclick = async (e)=>{
+  const p = curPlugin;
+  if (!p) return;
+  const en = descPair(p).en;
+  if (!en) return;
+  const btn = e.currentTarget;
+  btn.disabled = true; btn.textContent = "翻译中…";
+  try {
+    modalTr = await translateToZh(en);
+    modalLang = "zh";
+    setDesc(p);
+    toast("✓ 已机翻（机器翻译，仅供参考）");
+  } catch(err){
+    btn.disabled = false; btn.textContent = "🌐 译成中文";
+    toast("✗ 翻译失败：" + String((err && err.message) || err).slice(0, 60));
+  }
+};
 document.getElementById("close").onclick = ()=>document.getElementById("mask").classList.remove("show");
 document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) document.getElementById("mask").classList.remove("show"); };
 
@@ -1299,11 +1453,13 @@ function copyAllQueue(e){
   navigator.clipboard.writeText(all).then(()=>toast("已复制 " + qlist.length + " 条安装命令 ✓")).catch(()=>toast("复制失败"));
 }
 function copyAllUpdates(){
-  const upd = DATA.plugins.filter(p=>p.hasUpdate && isInstalled(p));
-  if (!upd.length){ toast("已安装的插件中没有检测到有新版本的"); return; }
+  const upd = DATA.plugins.filter(updateAvailable);
+  if (!upd.length){ toast("没有需要升级的插件（本机版本已不低于目录版本；本地链接安装的依赖不参与自动升级）"); return; }
   if (HOST){ hostUpdateAll(upd); return; }
-  const cmds = upd.map(p=> p.source==="npm" ? `dsh plugin add ${p.name}` : `dsh plugin add github:${p.repo}`);
-  const text = "# DSH 插件更新清单（共 " + upd.length + " 个：npm 源重装 latest，git 源重装默认分支最新提交）\n" + cmds.join("\n");
+  const cmds = upd.map(p=> p.source==="npm"
+    ? `dsh plugin add ${p.name}${updateTargetOf(p) ? "@" + updateTargetOf(p) : ""}`
+    : `dsh plugin add github:${p.repo}`);
+  const text = "# DSH 插件更新清单（共 " + upd.length + " 个：显式指定版本，避免 pnpm「Already up to date」空转）\n" + cmds.join("\n");
   navigator.clipboard.writeText(text).then(()=>toast("已复制 " + upd.length + " 条更新命令 ✓")).catch(()=>toast("复制失败，请手动复制"));
 }
 
