@@ -696,14 +696,34 @@ function reportLayout(){
   let pd;
   try { pd = p.document; } catch(e){ return }   // 跨源就读不到，放弃上报
   const de = pd.documentElement;
+  // 从 iframe 一路向上走，把每一层的尺寸与 overflow 都记下来。
+  // 「两条滚动条」不一定是文档在滚：设置页内容列可能是中间某一层在滚，
+  // 只看 documentElement 会漏掉它 —— 上一版就是这么漏的。
+  const chain = [];
+  let el = p.frameElement;
+  let guard = 0;
+  while (el && guard++ < 12) {
+    let cs = null;
+    try { cs = p.getComputedStyle(el); } catch (e) { cs = null; }
+    chain.push({
+      tag: String(el.tagName).toLowerCase(),
+      cls: String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || '').slice(0, 48),
+      ch: el.clientHeight, sh: el.scrollHeight,
+      cw: el.clientWidth, sw: el.scrollWidth,
+      oy: cs ? cs.overflowY : null,
+    });
+    el = el.parentElement;
+  }
   const snap = {
     selfH: window.innerHeight,
-    selfScrollH: de === document.documentElement ? document.documentElement.scrollHeight : null,
+    selfW: window.innerWidth,
+    selfScrollH: document.documentElement.scrollHeight,
     parentH: p.innerHeight,
+    parentW: p.innerWidth,
     parentScrollH: de.scrollHeight,
     parentScrollW: de.scrollWidth,
-    // 宿主文档自己要滚，就是用户看到的第二条滚动条
     hostScrolls: de.scrollHeight > p.innerHeight + 2,
+    chain: chain,
   };
   apiFetch("api/layout", { method:"POST", headers:{"content-type":"application/json"},
     body: JSON.stringify(snap) }).catch(()=>{});
