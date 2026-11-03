@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DSH 插件商店</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20gradientUnits%3D%22userSpaceOnUse%22%20x1%3D%226%22%20y1%3D%222%22%20x2%3D%2258%22%20y2%3D%2262%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2310606f%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%2307303c%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2302151b%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%229%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%280%201.5%29%22%3E%3Cpath%20d%3D%22M27%2026.5v-6a5%205%200%200%201%2010%200v6%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224.4%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M20.4%2026H43.6a3.4%203.4%200%200%201%203.3%202.9L44.05%2044.24A3.4%203.4%200%200%201%2040.65%2047.6H23.35a3.4%203.4%200%200%201-3.3-3.36L17.1%2028.9A3.4%203.4%200%200%201%2020.4%2026z%22%20fill%3D%22%23fff%22%2F%3E%3Cg%20stroke%3D%22url%28%23g%29%22%20stroke-width%3D%223.9%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M32%2032.8v9.2%22%2F%3E%3Cpath%20d%3D%22M27.4%2037.4h9.2%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20gradientUnits%3D%22userSpaceOnUse%22%20x1%3D%222%22%20y1%3D%220.7%22%20x2%3D%2222%22%20y2%3D%2223.3%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2310606f%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%2307303c%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2302151b%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2224%22%20height%3D%2224%22%20rx%3D%223.4%22%20fill%3D%22url%28%23g%29%22%2F%3E%3Cg%20transform%3D%22translate%280%20-0.7%29%22%3E%3Cpath%20d%3D%22M2.6%209.2L4.55%204.5A1.6%201.6%200%200%201%206.04%203.5h11.92a1.6%201.6%200%200%201%201.49%201L21.4%209.2Z%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20d%3D%22M5.3%209.2v10.2a1.2%201.2%200%200%200%201.2%201.2h11a1.2%201.2%200%200%200%201.2-1.2V9.2%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9.4%2020.6v-5.2a1.1%201.1%200%200%201%201.1-1.1h3a1.1%201.1%200%200%201%201.1%201.1v5.2%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <style>
   :root{
     --bg:#f5f7fa; --bg2:#ffffff; --bg3:#eef2f7;
@@ -38,9 +38,8 @@
   header{background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
   .head{max-width:1360px;margin:0 auto;padding:10px 26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:10px;flex-shrink:0;cursor:pointer}
-  .logo{width:34px;height:34px;border-radius:9px;flex-shrink:0;box-shadow:0 2px 8px rgba(6,48,60,.28)}
+  .logo{width:34px;height:34px;border-radius:5px;flex-shrink:0;box-shadow:0 2px 8px rgba(6,48,60,.28)}
   .logo svg{width:100%;height:100%;display:block}
-  .logo svg{width:76%;height:76%;display:block}
   .brand b{font-size:17px;letter-spacing:.3px}
   .brand small{display:block;font-size:11px;color:var(--fg3);font-weight:400;letter-spacing:.5px}
   .search{flex:1;min-width:200px;max-width:520px;position:relative}
@@ -312,7 +311,7 @@
 
 <header>
   <div class="head">
-    <div class="brand" onclick="setTab('discover')"><div class="logo"><svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="dshlogo" gradientUnits="userSpaceOnUse" x1="6" y1="2" x2="58" y2="62"><stop offset="0" stop-color="#10606f"/><stop offset=".5" stop-color="#07303c"/><stop offset="1" stop-color="#02151b"/></linearGradient></defs><rect width="64" height="64" rx="9" fill="url(#dshlogo)"/><g transform="translate(0 1.5)"><path d="M27 26.5v-6a5 5 0 0 1 10 0v6" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round"/><path d="M20.4 26H43.6a3.4 3.4 0 0 1 3.3 2.9L44.05 44.24A3.4 3.4 0 0 1 40.65 47.6H23.35a3.4 3.4 0 0 1-3.3-3.36L17.1 28.9A3.4 3.4 0 0 1 20.4 26z" fill="#fff"/><g stroke="url(#dshlogo)" stroke-width="3.9" stroke-linecap="round"><path d="M32 32.8v9.2"/><path d="M27.4 37.4h9.2"/></g></g></svg></div><div><b>DSH 插件商店</b><small>Plugin Store</small></div></div>
+    <div class="brand" onclick="setTab('discover')"><div class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="dshlogo" gradientUnits="userSpaceOnUse" x1="2" y1="0.7" x2="22" y2="23.3"><stop offset="0" stop-color="#10606f"/><stop offset=".5" stop-color="#07303c"/><stop offset="1" stop-color="#02151b"/></linearGradient></defs><rect width="24" height="24" rx="3.4" fill="url(#dshlogo)"/><g transform="translate(0 -0.7)"><path d="M2.6 9.2L4.55 4.5A1.6 1.6 0 0 1 6.04 3.5h11.92a1.6 1.6 0 0 1 1.49 1L21.4 9.2Z" fill="#fff"/><path d="M5.3 9.2v10.2a1.2 1.2 0 0 0 1.2 1.2h11a1.2 1.2 0 0 0 1.2-1.2V9.2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.4 20.6v-5.2a1.1 1.1 0 0 1 1.1-1.1h3a1.1 1.1 0 0 1 1.1 1.1v5.2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g></svg></div><div><b>DSH 插件商店</b><small>Plugin Store</small></div></div>
     <div class="search"><span class="ic">⌕</span>
       <input id="q" type="text" placeholder="搜索插件名称 / 描述 / 标签…" autocomplete="off">
     </div>
