@@ -106,6 +106,7 @@ python pipeline/build.py                # 生成索引与网站
 - [x] Actions 流水线：seed → incremental → build → deploy 全自动跑通（含 BOM/限速/失败率熔断容错）
 - [x] 8 条 fixture 用例覆盖 build 输出：npm_meta 直接补版本（不打 registry）、404 包不再重复请求、跨仓库撞名两条都保留、同仓库重复仍合并、git 安装命令用完整 owner/repo、hasUpdate 判定
 - [x] `http_get_json` 429 自动降级 npmmirror 并取到版本，404 抛 HTTPError（此前 NameError 被吞导致降级整段失效）
+- [x] 已安装页的卸载：状态用「已安装」徽标表达，按钮一律是明确动作（更新 / 卸载），不再把「已安装」做成点击即卸载的按钮；卸载发本机真实依赖键（目录名 `yujunzhixue-dsh-purge` → 依赖键 `dsh-purge`）
 - [x] 网站在浏览器实测：静态站（无宿主 API 时降级为复制命令、默认列表视图、视图选择持久化、屏蔽/收藏/待装/已装联动、顶部"全部更新"计数随标记实时变化）与宿主模式（已装识别含按 repo 匹配的 git 插件、安装/更新载荷、iframe 内只保留宿主一条滚动条）两条路径
 - [x] `deploy/deploy.ps1` 可执行（此前 `param([string]$Host)` 与 PowerShell 只读自动变量冲突，一运行即 VariableNotWritable）
 - [x] git 条目真实版本号：`--gitver` 从锁定的 commit 读 `package.json#version`（含 monorepo 子目录），索引不再恒写占位 `0.0.0`；只在 commit 变化时重读

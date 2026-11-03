@@ -136,6 +136,10 @@
   .install-btn.upd{background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff}
   .install-btn.danger{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(229,72,77,.32);font-weight:600}
   .install-btn.danger:hover{background:#fbdada}
+  .install-btn.mini{padding:6px 11px;font-size:12px}
+  .btns{display:flex;gap:6px;align-items:center;width:100%}
+  .btns .install-btn{flex:1}
+  .badge.inst{color:var(--ok);border-color:rgba(18,161,80,.35);background:var(--ok-bg)}
   .ops{display:flex;gap:4px}
   .op{width:27px;height:27px;border-radius:7px;border:1px solid var(--line);background:var(--bg2);color:var(--fg3);font-size:13px;cursor:pointer;line-height:1;transition:all .12s}
   .op:hover{border-color:var(--accent);color:var(--accent-deep)}
@@ -234,6 +238,9 @@
   .install-box code{font-family:var(--mono);font-size:12.5px;color:var(--accent-deep);flex:1;word-break:break-all}
   .install-box button{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:6px 15px;font-size:12.5px;cursor:pointer;font-weight:600;flex-shrink:0}
   .install-box button:hover{background:var(--accent-deep)}
+  .install-box button.upd{background:linear-gradient(135deg,#f59e0b,#ef4444)}
+  .install-box button.danger{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(229,72,77,.32)}
+  .install-box button.danger:hover{background:#fbdada}
   .install-box button.copied{background:var(--ok)}
   .no-install{background:var(--bg);border:1px dashed var(--line2);border-radius:10px;padding:11px 14px;font-size:12.5px;color:var(--fg3)}
   .m-links{display:flex;gap:16px;font-size:13px;margin-top:4px;flex-wrap:wrap}
@@ -452,20 +459,21 @@ function installedExtras(){
   }
   return out;
 }
-/* 主按钮反映本机状态，而不是永远写「安装」 */
+/* 主按钮反映本机状态。已安装时不再把「已安装」做成按钮 —— 它看着像状态标签，
+   点下去却执行卸载，既不明显也危险。状态交给徽标，按钮一律是明确动作：更新 / 卸载。 */
 function mainBtnHtml(p, i){
   if (p.localOnly)
     return `<button class="install-btn danger" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`;
-  if (isInstalled(p)){
-    if (!HOST)
-      return `<button class="install-btn done" data-inst="${i}" data-act="unmark" title="点击取消已安装标记">已安装</button>`;
-    if (p.hasUpdate)
-      return `<button class="install-btn upd" data-inst="${i}" data-act="update" title="重装到最新版（npm latest / 默认分支最新提交）">更新</button>`;
-    return `<button class="install-btn done" data-inst="${i}" data-act="uninstall" title="点击卸载">已安装</button>`;
-  }
-  return p.installable
-    ? `<button class="install-btn" data-inst="${i}" data-act="install" title="${HOST?"真实安装到 DSH":"复制安装命令"}">安装</button>`
-    : `<button class="install-btn pending" disabled title="Git 凭据待补齐">待补</button>`;
+  if (!isInstalled(p))
+    return p.installable
+      ? `<button class="install-btn" data-inst="${i}" data-act="install" title="${HOST?"真实安装到 DSH":"复制安装命令"}">安装</button>`
+      : `<button class="install-btn pending" disabled title="Git 凭据待补齐">待补</button>`;
+  if (!HOST)
+    return `<button class="install-btn done" data-inst="${i}" data-act="unmark" title="目录站读不到本机状态，这是手动标记">取消标记</button>`;
+  const acts = [];
+  if (p.hasUpdate) acts.push(`<button class="install-btn upd" data-inst="${i}" data-act="update" title="重装到最新版（npm latest / 默认分支最新提交）">更新</button>`);
+  acts.push(`<button class="install-btn danger${p.hasUpdate?" mini":""}" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`);
+  return `<div class="btns">${acts.join("")}</div>`;
 }
 
 /* ---------- 宿主模式（dsh-store-market 插件内运行时启用） ---------- */
@@ -869,6 +877,7 @@ function badges(p){
   if (p.official) h += `<span class="badge off">官方</span>`;
   if (isNew(p)) h += `<span class="badge new">新增</span>`;
   h += updBadge(p);
+  if (isInstalled(p)) h += `<span class="badge inst">已安装</span>`;
   if (state.tab==="installed" && p.hasUpdate) h += `<span class="badge upd2">可更新</span>`;
   if (p.version) h += `<span class="badge ver">v${esc(p.version)}</span>`;
   if (p.source==="npm" && p.downloads) h += `<span class="badge dl">↓ ${fmtN(p.downloads)}</span>`;
@@ -1049,14 +1058,16 @@ function openModalByPlugin(p){
     document.getElementById("uninst").onclick = ()=>hostUninstall(p);
   } else if (p.installable && p.install){
     const on = isInstalled(p);
-    const label = !HOST ? "复制" : (!on ? "安装" : (p.hasUpdate ? "更新" : "已安装 · 点击卸载"));
-    inst.innerHTML = `<div class="install-box"><code${HOST?' style="font-size:12px"':""}>${esc(p.install)}</code><button id="cp" class="${HOST&&on&&!p.hasUpdate?'done':(HOST&&on&&p.hasUpdate?'upd':'')}">${label}</button></div>`;
-    document.getElementById("cp").onclick = e=>{
-      if (!HOST){ copyText(p.install, e.target, "已复制"); return; }
-      if (!on){ hostInstall(p, e.target); return; }
-      if (p.hasUpdate){ hostUpdateOne(p, e.target); return; }
-      hostUninstall(p);
-    };
+    let btns;
+    if (!HOST) btns = `<button id="cp">复制</button>`;
+    else if (!on) btns = `<button id="act">安装</button>`;
+    else btns = (p.hasUpdate ? `<button id="act" class="upd">更新</button>` : "")
+              + `<button id="un" class="danger">卸载</button>`;
+    inst.innerHTML = `<div class="install-box"><code>${esc(p.install)}</code>${btns}</div>`;
+    const _cp = document.getElementById("cp"); if (_cp) _cp.onclick = e=>copyText(p.install, e.target, "已复制");
+    const _act = document.getElementById("act");
+    if (_act) _act.onclick = e=>{ if (!isInstalled(p)) hostInstall(p, e.target); else hostUpdateOne(p, e.target); };
+    const _un = document.getElementById("un"); if (_un) _un.onclick = ()=>hostUninstall(p);
   } else {
     inst.innerHTML = `<div class="no-install">该插件为 Git 来源，安装凭据（commit）正由每日增量管道补齐，补齐后即可一键安装。可先前往 GitHub 仓库查看。</div>`;
   }
