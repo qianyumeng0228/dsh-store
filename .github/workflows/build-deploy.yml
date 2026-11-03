@@ -87,6 +87,8 @@ jobs:
           mkdir -p _site
           cp -r dist/site/* _site/
           cp dist/index.json _site/index.json
+          # 只含可装条目的那份才是该粘进宿主「发现」的地址；不进 git，避免仓库历史翻倍
+          cp dist/index-installable.json _site/index-installable.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

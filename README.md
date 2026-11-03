@@ -4,7 +4,8 @@
 
 **线上地址（GitHub Pages 自动部署）**：
 - 网站：https://qianyumeng0228.github.io/dsh-store/
-- 索引源：https://qianyumeng0228.github.io/dsh-store/index.json
+- 索引源（推荐，只含可装条目）：https://qianyumeng0228.github.io/dsh-store/index-installable.json
+- 全量索引（含不可装占位，供目录/统计）：https://qianyumeng0228.github.io/dsh-store/index.json
 - 仓库：https://github.com/qianyumeng0228/dsh-store
 
 每次 push / 每天 03:17 UTC 由 GitHub Actions 自动执行：种子刷新 → git commit 补齐 → npm 版本/更新检测 → 图标探测 → topic 扫描 → 生成索引 → 发布 Pages，无需手动运维。
@@ -71,8 +72,13 @@ dsh-store/
 **加索引源**：DSH → Plugins → Discover → Index sources，粘贴：
 
 ```
-https://qianyumeng0228.github.io/dsh-store/index.json
+https://qianyumeng0228.github.io/dsh-store/index-installable.json
 ```
+
+> 用这一份而不是 `index.json`：全量索引里过半条目没有 `versions`（收录但装不了，
+> 网站要它们撑目录与统计），而宿主的「发现」把每条都可当作可装项渲染，
+> 贴全量会得到一万多行点了没反应的死条目。可安装那份每条都带版本与来源，
+> 体积也从 17MB/3.6MB(gzip) 降到 8.7MB/1.8MB(gzip)。
 
 **命令行安装**：
 
@@ -96,6 +102,7 @@ python pipeline/build.py                # 生成索引与网站
 
 ## 已验证
 
+- [x] 新增 `dist/index-installable.json`：只保留带 `versions` 的条目，作为宿主 Discover 的推荐索引源。合成库跑真实 `build.py` 复测 12 项断言 —— 可安装份每条都带 version + source + engines、是全量份的子集、无 versions 条目仍留在全量份里、`rejected` 状态两边都不入库、git 条目的子目录 `path` 透传、两份标题不同以便宿主源列表区分
 - [x] `index.json` 符合 format-1（format/title/metadata.categories/plugins[] 结构与现有 vlln、dshopen 索引一致）
 - [x] 输出条目必填字段零缺失，名称唯一非空，可装条目 `versions[0].version` 均为非空字符串
 - [x] 新字段（author/avatar/icon/dsh/latestVersion/hasUpdate）全部进入管道输出与网站数据，build 幂等（连跑两次指纹一致）

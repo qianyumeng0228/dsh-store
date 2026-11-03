@@ -368,6 +368,28 @@ def main():
     print(f"[build] index.json: {len(plugins_out)} 条可索引（含不可装占位 {skipped_git_nocommit}，"
           f"撞名限定 {qualified}，重复合并 {dup}）")
 
+    # ---- 可直接粘进宿主 Discover 的索引源 ----
+    # 全量索引里过半条目没有 versions（浏览目录要它们，装了没有意义）。宿主原生
+    # 「发现」页把每条都当成可装项呈现，缺 versions 就是一行点了没反应的死胡同，
+    # 所以另出一份只保留能装的安装索引，体积也小一半以上。
+    installable_out = [p for p in plugins_out if p.get("versions")]
+    install_index = dict(index)
+    install_index["plugins"] = installable_out
+    install_index["title"] = {
+        "en": "DSH Plugin Store (installable)",
+        "zh": "DSH 插件商店（仅可安装）",
+    }
+    install_index["description"] = {
+        "en": "Installable-only slice of the DSH community plugin index: every entry "
+              "carries a resolvable version and a source the CLI can install. Add this "
+              "file as an index source under Plugins → Discover.",
+        "zh": "DSH 社区插件索引的可安装切片：每条都带可解析的版本与可安装的来源。"
+              "把本文件加成 Plugins → Discover 的索引源即可浏览安装。",
+    }
+    (config.DIST_DIR / "index-installable.json").write_text(
+        json.dumps(install_index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"[build] index-installable.json: {len(installable_out)} 条（已剔除无 versions {len(plugins_out) - len(installable_out)} 条）")
+
     # ---- 网站数据 ----
     site_data = {
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
