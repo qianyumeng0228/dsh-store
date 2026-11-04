@@ -1,140 +1,146 @@
-# DSH 插件商店
+English | [中文](README.zh.md)
 
-面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的社区插件商店：**format-1 索引源 + 静态浏览站**。在 DSH 的 Plugins → Discover → Index sources 里加一行索引地址，即可浏览、搜索、一键安装；网站供日常逛和查。
+[![build](https://github.com/qianyumeng0228/dsh-store/actions/workflows/build-deploy.yml/badge.svg)](https://github.com/qianyumeng0228/dsh-store/actions/workflows/build-deploy.yml)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![catalog](https://img.shields.io/badge/catalog-29,593_plugins-blue)](https://qianyumeng0228.github.io/dsh-store/)
 
-**线上地址（GitHub Pages 自动部署）**：
-- 网站：https://qianyumeng0228.github.io/dsh-store/
-- 索引源（推荐，只含可装条目）：https://qianyumeng0228.github.io/dsh-store/index-installable.json
-- 全量索引（含不可装占位，供目录/统计）：https://qianyumeng0228.github.io/dsh-store/index.json
-- 仓库：https://github.com/qianyumeng0228/dsh-store
+# dsh-store
 
-每次 push / 每天 03:17 UTC 由 GitHub Actions 自动执行：种子刷新 → git commit 补齐 → npm 版本/更新检测 → 图标探测 → topic 扫描 → 生成索引 → 发布 Pages，无需手动运维。
+The **catalog** behind the DSH plugin stores: a Python pipeline that discovers, verifies and
+publishes the community plugin list for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness),
+plus a static browsing site and two machine-readable index sources.
 
-## 当前数据（2026-11-02 13:58 UTC 实测线上 `data/plugins.json`）
-
-| 指标 | 数值 |
+| | |
 |---|---|
-| 索引收录（去重后输出） | 25,987 |
-| 其中可一键安装 | 11,742（来源：npm 8,591 / git 17,396） |
-| 种子来源 | dsh.works `plugins.json`（21,928 条，每日刷新） |
-| 作者头像覆盖（真实 GitHub 头像） | 19,231 |
-| 插件图标（dshopen + awesome 双源 + GitHub 路径探测） | 1,124 |
-| 有新版本标记 | 203 |
-| DSH 适配版本区间（engines.dsh） | 1,763 |
-| npm 近 30 天下载量已补齐 | 389 |
-| 判定标准 | dsh.works 逐条核验的 `package.json#dsh` 字段证据 + 自建 topic 扫描复核 |
-| 分类 | 17 个双语分类（工具与能力 / 记忆 / 界面增强 / 模型与账号接入 …） |
+| Site | https://qianyumeng0228.github.io/dsh-store/ |
+| Index source (recommended) | `https://qianyumeng0228.github.io/dsh-store/index-installable.json` |
+| Full index (includes not-yet-installable rows) | `https://qianyumeng0228.github.io/dsh-store/index.json` |
+| Site data (what the page loads) | `https://qianyumeng0228.github.io/dsh-store/data/plugins.json` |
+| Host-side store plugin | [qianyumeng0228/dsh-plug-store](https://github.com/qianyumeng0228/dsh-plug-store) |
 
-> 本表此前长期停在 17,447 / 可装 4,830，低于 README 早先宣称的 17,799 / 6,637。原因不是插件变少，而是每日增量成果没有累积：
-> `actions/cache` 用了固定 key（同 key 缓存不可覆盖，命中后 post 步跳过上传），`store.db` 被冻结在首日快照，
-> 每轮补好的 git commit / npm 版本 / 下载量 / 图标探测 / 新仓库扫描随运行结束一起丢弃。
-> 另有一处 `build.py` 的 npm 镜像降级因 `HTTPError` 未导入而整段失效，导致收录版本号补不上、可装数被压低。
-> 两处已修复，上表就是修复后连续累积的结果（索引 +8.5k、可装 +6.9k、图标 626→1,124、engines.dsh 1,081→1,763）。
+Nothing needs to be run by hand: every push and a daily 03:17 UTC schedule re-run
+seed → discovery → verification → build → Pages deploy.
 
-## 功能（对标 dsh-market 的可移植部分）
+## Current numbers
 
-- **作者头像**：卡片/行式视图展示插件作者真实 GitHub 头像（`github.com/<owner>.png`），无头像不占位。
-- **插件图标**：有图标才显示（dshopen 索引 → awesome 目录 → GitHub 仓库常见路径探测），没有不占位。
-- **🔄 有新版本**：数据管道每日比对 npm registry 最新版 / GitHub 默认分支最新提交，标记"有新版本 vX.Y.Z / 有新提交"；支持按此筛选、已安装插件标"可更新"。
-- **DSH 适配过滤**：按 `engines.dsh` 区间过滤"兼容当前 DSH 版本"（版本号自填，未声明宿主要求的插件不隐藏，与 dsh-market 口径一致）。
-- **提交插件**：网站内置「提交插件」标签页——填表单一键生成 GitHub Issue 预填链接，附收录规则。
-- 其余：发现/主题/收藏/已安装/已屏蔽/高级 6 页、17 分类计数、搜索、多维筛选（可安装/官方/7天新增/🔄有新版本/收藏/已安装）、7 种排序（含随机）、卡片/行式双视图、🕘最近收录 + 🔥最多安装 横滑分区、派生标签（🆕新增/◷更新/↓下载量分档）、**分页（页码 + 上一页/下一页 + 第 x/y 页 + 每页 24/48/96 可选并记住，列表上下各一条）**、详情弹层（作者/版本/下载量/DSH 适配/安装命令）、底部待装栏、本地收藏/已装/屏蔽、备份导出导入、索引源诊断。
+Measured from the live `data/plugins.json` on 2026-11-04:
 
-## 项目结构
+| | |
+|---|---|
+| Catalogued plugins | 29,593 |
+| One-click installable | 14,344 (npm 10,598 sources / git remainder) |
+| Categories | 17, bilingual |
+| Descriptions in Chinese | ~99% (build-time machine translation, source kept in `descEn`) |
+| Coverage of every other public DSH index | 92–96% of each, and a superset in total |
 
-```
-dsh-store/
-├── config.py              # 路径 / 收录规则 / 分类映射 / GitHub 限速与批量配置
-├── pipeline/
-│   ├── db.py              # 主库 schema 迁移（幂等）+ repository URL 解析 + 图标源映射
-│   ├── seed.py            # 种子导入：dsh.works JSON → SQLite（清洗+中英拆分+分类）
-│   ├── incremental.py     # 增量：git commit 补齐 + git 版本号 + npm 更新检测 + 图标探测 + topic 扫描
-│   └── build.py           # SQLite → dist/index.json（format-1）+ 网站数据
-├── site/index.html        # 网站源码（build 时合并进输出）
-├── data/                  # raw/ 原始种子（gitignore）；store.db SQLite 主库（Actions 缓存持久化）
-├── dist/                  # 构建产物（index.json + 网站，不入库）
-├── .github/workflows/     # build-deploy.yml：全自动流水线
-└── deploy/                # 本地 GCP/Caddy 部署脚本（备选，现主要用 Pages）
-```
+The last row is the point of this repo: it merges the ecosystem's independent registries instead
+of copying one of them.
 
-## 提交插件（收录规则）
+## How an entry earns its place
 
-网站「提交插件」页生成预填 Issue：https://github.com/qianyumeng0228/dsh-store/issues/new
+An entry is listed only when the pipeline finds **evidence in the repository itself** — a
+`package.json` carrying a `dsh` field, a `dsh.bundle` declaration, or a dependency on
+`@deepseek-ai/dsh*`. Names and topics are hints, never the criterion, so plugins that do not start
+with `dsh-` are included and mislabelled ones are not.
 
-1. **提交方式**：本仓库 GitHub Issue（表单自动生成预填链接）。
-2. **收录条件**：仓库存在且 `package.json` 含 `dsh` 字段（管道自动校验证据），或已在 npm 发布且能被 dsh 识别；GitHub 仓库建议打 `topic:dsh-plugin`。
-3. **收录来源**：npm 包名（`dsh plugin add <name>`）或 `github:owner/repo`（`dsh plugin add github:<owner/repo>`）。
-4. **处理流程**：提交后由管道每日自动核验，通过即进入索引（状态 verified）；需人工判断的会挂起。
-5. **安全提示**：git 来源在 DSH 中安装可能需要 allowBuilds，建议锁定 commit；恶意、盗用或失效插件会被移除。
+Discovery channels, all automated:
 
-## 使用（给 DSH 用户）
+| Channel | What it contributes |
+|---|---|
+| `dsh.works` seed | the largest single registry, refreshed daily |
+| `awesome-dsh-plugin.com` | curated registry + icon map |
+| `dshopen.org` | curated registry + icon map |
+| GitHub topic scan | `topic:dsh-plugin`, `topic:deepseek-harness`, `topic:dsh` |
+| npm keyword crawl | `keywords:dsh-plugin`, `keywords:deepseek-harness` + manifest verification |
+| External index mirrors | other marketplaces' published `index.json` files, kept as *candidates* |
+| GitHub code search | fallback for repositories that carry the manifest signature but no topic |
 
-**加索引源**：DSH → Plugins → Discover → Index sources，粘贴：
+External indexes are never trusted directly: their entries land as `status='pending'` candidates
+and are promoted only after `package.json` verification. That is why the catalog can claim 92–96%
+coverage of them without inheriting their dead links.
+
+## Using it from DSH
+
+**As an index source** — DSH → Plugins → Discover → Index sources, paste:
 
 ```
 https://qianyumeng0228.github.io/dsh-store/index-installable.json
 ```
 
-> 用这一份而不是 `index.json`：全量索引里过半条目没有 `versions`（收录但装不了，
-> 网站要它们撑目录与统计），而宿主的「发现」把每条都可当作可装项渲染，
-> 贴全量会得到一万多行点了没反应的死条目。可安装那份每条都带版本与来源，
-> 体积也从 17MB/3.6MB(gzip) 降到 8.7MB/1.8MB(gzip)。
+Use this one rather than `index.json`: the full index keeps entries that are catalogued but not
+yet installable (the site needs them for totals and categories), while the host's Discover renders
+every row as installable — pasting the full index gives you thousands of rows that do nothing.
+The installable file is also smaller: ~8.7 MB raw, ~1.8 MB gzipped, inside the host's 15-second
+load window.
 
-**命令行安装**：
+**From the command line:**
 
 ```sh
-dsh plugin add <name>                    # npm 插件
-dsh plugin add github:<owner/repo>       # git 插件
+dsh plugin add <name>                 # npm-sourced plugin
+dsh plugin add github:<owner/repo>    # git-sourced plugin
 ```
 
-## 运维
+## Repository layout
 
-云端全自动（GitHub Actions，每天 03:17 UTC + 每次 push），无需手动操作。本地复跑：
-
-```powershell
-python pipeline/seed.py                 # 种子刷新
-python pipeline/incremental.py --all    # 补 commit + git 版本号 + npm 更新检测 + 图标探测 + 扫新仓库（本地无 token 时每轮 40 个）
-python pipeline/incremental.py --updates --npm-batch 500 --git-batch 200   # 本地只想小范围试更新检测时
-python pipeline/build.py                # 生成索引与网站
+```
+dsh-store/
+├── config.py              # paths, inclusion rules, category map, per-run batch limits
+├── pipeline/
+│   ├── db.py              # idempotent schema migration, repository URL parsing, icon maps
+│   ├── seed.py            # seed import: dsh.works JSON → SQLite (cleaning, zh/en split, categories)
+│   ├── discover.py        # discovery channels: external indexes, code search, npm keywords
+│   ├── incremental.py     # commit fill, version reads, update checks, icon probe, topic scan, discovery
+│   ├── translate.py       # batch machine translation of English-only descriptions
+│   └── build.py           # SQLite → dist/index.json (format-1), index-installable.json, site data
+├── site/index.html        # the store UI — single source of truth, copied into the plugin repo
+├── index.json             # jsDelivr mirror of the latest full index (committed by CI)
+├── data/                  # raw seeds and store.db (gitignored; the DB persists via Actions cache)
+├── dist/                  # build output (gitignored)
+└── .github/workflows/     # build-deploy.yml: the whole pipeline, unattended
 ```
 
-`store.db` 是增量成果的唯一载体：云端由 `actions/cache` 按运行编号跨运行累积（缓存键必须每轮唯一，否则命中旧键后不会上传，成果全部丢失）。
+`site/index.html` here is the **only** copy that should be edited; the plugin repo keeps a
+byte-identical copy, and host-specific behaviour is detected at runtime inside the same file.
 
-## 已验证
+## Running it locally
 
-- [x] 页头徽标与 favicon 的店面图形改为**描边拱篷 + 分格篷底 + 屋身 + 门**，对齐宿主设置页里 插件市场 那一行的语法（此前是实心遮阳篷，两个商店挨着看像两回事）。24 网格、描边 1.9、垂直校正 `translate(0 -0.25)`，实测 16px / 18px 墨迹居中偏差均为 0.00 / 0.00；同一份 path 数据由宿主插件 `STORE_PATHS` 单点定义，侧栏字形与设置页导航共用
-- [x] 页头徽标与 favicon 改用店面标识（与宿主侧栏同一图形）。旧袋子在 34px 下加号下臂离袋底只剩 1.45 单位、两臂糊成一条，袋形读成方块；`.logo svg` 还有两条互相覆盖的宽高规则，实际生效的 `76%` 把徽标缩到 26px 且落在非整数像素上。现统一在 24 网格、svg 铺满 34px 容器，实测墨迹与徽章中心偏差 0.00 / 0.00，四边留白 4/4/4/4
-- [x] 分页替代「加载更多」：真实数据（26,012 条）在浏览器里跑通 —— 每页 24 时 `第 1–24 个 / 共 26012 个插件`、1084 页；点页码与上下页区间正确推进；换每页 96 后重算为 271 页并写入 localStorage；**筛选条件一变就回第 1 页**（否则停在旧页码会看到空白页；按输入签名判定，避免逐个改写散落的入口）；页码窗口首尾恒显、当前页左右各带一页、其余省略
-- [x] 宿主 iframe 内不再把 iframe 撑到内容高度：`.mask` 等 `position:fixed` 浮层改按 iframe 视口定位，详情弹层回到可见区正中。同时不给 `html/body` 写 `overflow` —— 一旦 `html` 变成滚动容器，视口就不再滚动，`window.scrollTo` 静默失效、翻页后「回到列表顶部」点不动（实测 `window.scrollY` 可动到 900、粘性头贴顶 0、跳页后列表锚点停在 64px）
-- [x] 新增 `dist/index-installable.json`：只保留带 `versions` 的条目，作为宿主 Discover 的推荐索引源。合成库跑真实 `build.py` 复测 12 项断言 —— 可安装份每条都带 version + source + engines、是全量份的子集、无 versions 条目仍留在全量份里、`rejected` 状态两边都不入库、git 条目的子目录 `path` 透传、两份标题不同以便宿主源列表区分
-- [x] `index.json` 符合 format-1（format/title/metadata.categories/plugins[] 结构与现有 vlln、dshopen 索引一致）
-- [x] 输出条目必填字段零缺失，名称唯一非空，可装条目 `versions[0].version` 均为非空字符串
-- [x] 新字段（author/avatar/icon/dsh/latestVersion/hasUpdate）全部进入管道输出与网站数据，build 幂等（连跑两次指纹一致）
-- [x] 作者头像/图标为真实数据（抽查 dsh-im：作者 xmanrui、头像 URL 实测 200、最新版 5.9.1 > 收录 5.9.0 正确标记有新版本）
-- [x] 网站渲染：头像 / 图标 / 🔄 有新版本 / DSH 兼容过滤 / 提交插件 / 横滑分区 / 分类导航 / 搜索 / 排序 / 筛选 / 详情弹层 / 待装栏（本地 fixture + 真实数据双验证）
-- [x] 本地 http 服务 200，`index.json` 与 `data/plugins.json` 可访问且为合法 JSON
-- [x] GitHub Pages 线上：首页 200（text/html）、索引与数据 200
-- [x] Actions 流水线：seed → incremental → build → deploy 全自动跑通（含 BOM/限速/失败率熔断容错）
-- [x] 8 条 fixture 用例覆盖 build 输出：npm_meta 直接补版本（不打 registry）、404 包不再重复请求、跨仓库撞名两条都保留、同仓库重复仍合并、git 安装命令用完整 owner/repo、hasUpdate 判定
-- [x] `http_get_json` 429 自动降级 npmmirror 并取到版本，404 抛 HTTPError（此前 NameError 被吞导致降级整段失效）
-- [x] 已安装页的卸载：状态用「已安装」徽标表达，按钮一律是明确动作（更新 / 卸载），不再把「已安装」做成点击即卸载的按钮；卸载发本机真实依赖键（目录名 `yujunzhixue-dsh-purge` → 依赖键 `dsh-purge`）
-- [x] 网站在浏览器实测：静态站（无宿主 API 时降级为复制命令、默认列表视图、视图选择持久化、屏蔽/收藏/待装/已装联动、顶部"全部更新"计数随标记实时变化）与宿主模式（已装识别含按 repo 匹配的 git 插件、安装/更新载荷、iframe 内只保留宿主一条滚动条）两条路径
-- [x] `deploy/deploy.ps1` 可执行（此前 `param([string]$Host)` 与 PowerShell 只读自动变量冲突，一运行即 VariableNotWritable）
-- [x] git 条目真实版本号：`--gitver` 从锁定的 commit 读 `package.json#version`（含 monorepo 子目录），索引不再恒写占位 `0.0.0`；只在 commit 变化时重读
-- [ ] git 插件 commit 全量补齐：缓存修复后每天 2,000 个开始真正累积
-- [x] 差异追平与探测节流分列：`git_probed` 负责"7 天内不重复探测"，`git_checked` 只记差异起始日；追平改成一条纯 SQL（不花 API 配额）。此前两者挤在一列，无差异的高星仓库每轮立刻重新可选、占满 batch，长尾仓库永远轮不到
-- [x] `scan_new` 落库补全：bundle 识别（旧代码写的是 `"dsh.bundle" in data`，只匹配字面带点的键名，永远命中不了）、按 topics 映射 `category_key`（此前硬编码 `tools`）、把探测到的子目录写进 `path`、`INSERT OR IGNORE` 撞名不再计入新增数
-- [x] 索引字段对齐参考实现：`versions[].engines`（dshopen 979/979 都有）、npm `source.registry`（938/938 都有）、monorepo `source.path`
-- [ ] 图标 / 下载量 / npm engines.dsh 同理逐日累积（`NPM_UPDATE_BATCH=2000` ⇒ 7,073 个包约 3.5 天轮完一圈）
+```sh
+python pipeline/seed.py                 # refresh the seed
+python pipeline/incremental.py --all    # discovery + commit fill + versions + updates + icons
+python pipeline/build.py                # emit indexes and site data
+```
 
-## 已知边界
+`GITHUB_TOKEN` matters: without it the API budget is 60 requests/hour and each stage degrades to
+a small batch. `store.db` is the only carrier of incremental progress — in CI it is persisted by
+`actions/cache` under a **per-run key** with `restore-keys`, because a cache key cannot be
+overwritten once it exists (a fixed key silently froze the database at its first-day snapshot and
+threw away every daily gain).
 
-- **"有新版本"的语义**：本站是目录站，标记 = 与本站上次收录相比发布了新版本/新提交（7 天内自动追平收录版本）；**无法读取用户本机已装版本**。真实的一键安装/全部更新/进度条/重启提醒/导出日志/打开配置文件/任务面板/评论计数是宿主内 dsh-market 的能力，本站以"手动标记已安装 + 待装清单 + 复制命令"替代，高级页"关于"有完整说明。
-- **展示名撞名规则**：同一展示名下出现多个不同仓库时，用仓库名命名的条目会加 `owner-` 前缀（npm 包名本身全局唯一，不加前缀）。此前实现按展示名去重且只保留 star 最高的一个，实测丢弃了 3,436 条真实插件。
-- 索引体积约 10.9MB（17,447 条全字段）；DSH 15 秒加载窗口在 Pages CDN 下足够，若要更小可后续生成精简索引。
-- `index.json` 入库是为了 jsDelivr 镜像，每轮最多 ~11MB；仓库体积随时间线性增长，需要时改用 Release 资产或孤儿分支存放。
-- `dsh.works` 的 21,928 条含 skill/theme/tool 类别，当前索引只收 plugin/bundle；技能包后续可按需放开。
-- 分类由 tags 映射，无 tag 命中的插件落入「工具与能力」兜底。
-- 作者头像依赖 GitHub 头像 CDN（`github.com/<owner>.png`），网络受限时可能加载失败（前端已做 onerror 自动隐藏，不影响浏览）。
-- 定时构建不保证准点：`03:17 UTC` 的 schedule 曾延后到 10:32 才起跑，个别日子未触发。需要严格时效请改 `workflow_dispatch` 外部触发。
-- `site/index.html` 是 **本仓库为唯一来源**，`dsh-plug-store` 内的同名副本由其 `sync-upstream` 工作流同步；改 UI 只改这里，宿主专用差异（iframe 不滚动）由页面运行时检测，不再靠两份文件各自维护。
+## Submitting a plugin
+
+Use the site's **Submit** tab, which builds a pre-filled issue for this repository, or open one
+directly: https://github.com/qianyumeng0228/dsh-store/issues/new
+
+Inclusion requires a reachable repository whose `package.json` carries DSH evidence, plus either a
+published npm package or a git source the host can install. Entries are re-checked daily; dead,
+stolen or mislabelled ones are dropped. Adding `topic:dsh-plugin` to your repository gets it
+picked up without a submission.
+
+## Known limits
+
+- **Git long tail.** A git-sourced entry needs a resolved commit before it becomes installable.
+  ~17,000 entries are still queued and each run fills about 2,000 (API budget and runtime bound),
+  so installable coverage keeps climbing for days rather than instantly.
+- **"Has update" is catalog-relative.** This site cannot see your installed versions; it compares
+  against what it last recorded. Per-machine update decisions belong to the host plugin.
+- **Machine translation is machine translation.** Chinese descriptions are auto-generated from
+  English ones and kept beside the source (`desc` / `descEn`) so the original is never lost.
+- **The scheduled build is not guaranteed on time.** The 03:17 UTC cron has been observed starting
+  hours late, or skipping a day. Use `workflow_dispatch` if you need a deterministic refresh.
+- **`index.json` is committed** so jsDelivr can mirror it, which grows the repository by ~11 MB per
+  meaningful change; if that ever hurts, it should move to release assets or an orphan branch.
+- Listing is not endorsement: every entry is third-party code.
+
+## License
+
+MIT
