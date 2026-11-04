@@ -610,7 +610,7 @@ function mainBtnHtml(p, i){
   return `<div class="btns">${acts.join("")}</div>`;
 }
 
-/* ---------- 宿主模式（dsh-apps 插件内运行时启用） ---------- */
+/* ---------- 宿主模式（dsh-app-store 插件内运行时启用） ---------- */
 let HOST = null;
 /* 宿主 api 统一入口：带 x-dsh-store 自定义头，跨源页面会被预检挡住，
    服务端再校验回环 Host，防 DNS rebinding。 */
@@ -1976,12 +1976,12 @@ function renderAdvanced(){
       <div class="kv"><span>构建时间</span><b>${esc(DATA.updated||"-")}</b></div>
       <div class="desc">
         ${HOST
-          ? `当前为<b>宿主模式</b>（dsh-apps 插件，profile=${esc(HOST.profile)}）：<br>
+          ? `当前为<b>宿主模式</b>（dsh-app-store 插件，profile=${esc(HOST.profile)}）：<br>
              · 安装/卸载/更新通过 <code>dsh plugin</code> 真实执行；「已安装」页读取本机真实状态；<br>
              · 「备份」导出本机 DSH profile 配置；「诊断」检查 dsh CLI / profile / 数据源连通性。<br>`
           : `本站是<b>目录站</b>，无法读取你本机 DSH 的安装状态。<br>`}
         · 「🔄 有新版本」= 与本站上次收录相比有新版/新提交发布，最近 7 天内管道会自动追平；<br>
-        · 静态站用「手动标记已装 + 待装清单 + 复制安装命令」替代；安装 <code>dsh-apps</code> 插件后在 DSH 设置页进入商店即可获得真实一键安装/全部更新/备份/诊断；<br>
+        · 静态站用「手动标记已装 + 待装清单 + 复制安装命令」替代；安装 <code>dsh-app-store</code> 插件后在 DSH 设置页进入商店即可获得真实一键安装/全部更新/备份/诊断；<br>
         · git 来源在 DSH 中安装可能需要 allowBuilds，建议锁定 commit。
       </div>
     </div>
