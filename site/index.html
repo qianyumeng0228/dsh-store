@@ -939,25 +939,42 @@ function hashStr(s){
    浮层要罩住用户真正看得见的那一段，就得按宿主的滚动状态算：iframe 顶边到
    滚动容器可见区顶边的距离 = --vis-top，可见高度 = --vis-h。
    同源才能读，读不到就保持默认（整篇文档），退化成旧行为而不是报错。 */
-let _vpScrollEl = null, _vpLast = "";
+let _vpScrollEl = null, _vpReal = false, _vpBound = null, _vpLast = "";
+/* 宿主内容列：只有「确实是滚动容器且当前真的能滚」才当真实容器长期缓存。
+   原来找不到就退化成宿主文档并永久缓存 —— 如果那次退化发生在短页
+   （提交插件/高级，或只有几行的第 2 页），回到长页后 _vpScrollEl 仍是那个
+   错元素，浮层坐标从此全错（待装栏飘到页面中间、再也回不到底）。 */
+function findHostScroller(fe, p){
+  let sc = fe.parentElement;
+  while (sc && sc !== p.document.body) {
+    const oy = p.getComputedStyle(sc).overflowY;
+    if (/(auto|scroll)/.test(oy) && sc.scrollHeight > sc.clientHeight + 2) return sc;
+    sc = sc.parentElement;
+  }
+  return null;
+}
+function hostScroller(fe, p){
+  if (_vpScrollEl && _vpScrollEl.isConnected && _vpReal) return _vpScrollEl;
+  const real = findHostScroller(fe, p);
+  if (real) {
+    _vpScrollEl = real; _vpReal = true;
+    if (_vpBound !== real) {
+      try { real.addEventListener("scroll", syncViewport, {passive:true}); } catch(e){}
+      _vpBound = real;
+    }
+    return real;
+  }
+  // 短页：宿主列本来就不滚，退化成文档参考系，但不记成真实容器（下一轮继续找）
+  _vpReal = false;
+  return p.document.scrollingElement || p.document.body;
+}
 function syncViewport(){
   if (!IN_FRAME) return;
   const fe = window.frameElement;
   if (!fe) return;
   let p;
   try { p = window.parent; } catch(e){ return }
-  let sc = _vpScrollEl;
-  if (!sc || !sc.isConnected) {
-    sc = fe.parentElement;
-    while (sc && sc !== p.document.body) {
-      const oy = p.getComputedStyle(sc).overflowY;
-      if (/(auto|scroll)/.test(oy) && sc.scrollHeight > sc.clientHeight + 2) break;
-      sc = sc.parentElement;
-    }
-    if (!sc || sc === p.document.body) sc = p.document.scrollingElement || p.document.body;
-    _vpScrollEl = sc;
-    try { sc.addEventListener("scroll", syncViewport, {passive:true}); } catch(e){}
-  }
+  const sc = hostScroller(fe, p);
   const fr = fe.getBoundingClientRect();
   const sr = sc.getBoundingClientRect();
   const visTop = Math.max(0, sr.top - fr.top);
@@ -1060,6 +1077,11 @@ async function load(){
     // 宿主内容列滚动时同步可见窗口；低频兜底以防滚动事件没挂上
     syncViewport();
     setInterval(syncViewport, 250);
+    /* 兜底：宿主内本页不允许有任何内部滚动。一旦滚了（focus 抢滚动、遗留的 scrollTo
+       都会造成），表头被推出可视区且用户无法回滚，浮层坐标也会整体错位 —— 立刻归零。 */
+    if (IN_FRAME) window.addEventListener("scroll", () => {
+      if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
+    }, {passive:true});
     setTimeout(reportLayout, 1200);
     setTimeout(reportLayout, 3000);
   } catch(e){
@@ -1349,8 +1371,25 @@ function renderPager(total, pages){
 }
 function scrollTopOfList(){
   const anchor = document.getElementById("count-line");
-  const y = anchor ? anchor.getBoundingClientRect().top + window.scrollY - 64 : 0;
-  window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
+  if (!anchor) return;
+  if (IN_FRAME) {
+    /* 宿主内绝不能用 window.scrollTo：iframe 文档一滚，表头就被推出可视区，
+       而本页自己不滚（滚轮归宿主内容列），用户再也滚不回来 —— 表现就是
+       「上面的按钮栏都消失了」。同时 syncViewport 的浮层坐标是按
+       「iframe 文档坐标 == 视口坐标」算的，文档一滚待装栏/toast 也会整体错位。
+       要「翻页后回到列表顶部」就滚宿主列，把 count-line 送到窗口顶边下方。 */
+    const fe = window.frameElement;
+    if (!fe) return;
+    let p;
+    try { p = window.parent; } catch(e){ return }
+    const sc = findHostScroller(fe, p);
+    if (!sc) return;
+    const fr = fe.getBoundingClientRect(), col = sc.getBoundingClientRect();
+    const want = fr.top + anchor.getBoundingClientRect().top - 8;
+    sc.scrollTop += want - col.top;
+    return;
+  }
+  window.scrollTo({ top: Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - 64), behavior: "auto" });
 }
 /* ---------- 主题画廊（照 dsh-market 的实现）----------
    dsh-market 的「主题」页不是发现页换个过滤，而是**预览图墙**：成员按 theme 分类，
