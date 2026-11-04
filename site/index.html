@@ -251,7 +251,9 @@
   /* 任务面板：安装/更新/卸载实时进度。pnpm 的 ndjson 流没有总数，进度条按阶段估算，
      所以文案写"阶段 + 百分比（估算）"，不要伪装成精确下载进度 */
   .dock.has-ops .dock-body{max-height:min(46vh,420px)}
-  .dock-sec{padding:6px 16px 2px;font-size:11px;color:var(--fg3);letter-spacing:.4px;background:var(--bg2);position:sticky;top:0;border-bottom:1px solid var(--line)}
+  .dock-sec{padding:6px 16px 2px;font-size:11px;color:var(--fg3);letter-spacing:.4px;background:var(--bg2);position:sticky;top:0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .dock-sec .clr{margin-left:auto;background:var(--bg2);border:1px solid var(--line2);border-radius:6px;color:var(--fg2);font-size:11px;padding:1px 9px;cursor:pointer;letter-spacing:0;flex-shrink:0;font-family:inherit}
+  .dock-sec .clr:hover{border-color:var(--accent);color:var(--accent)}
   .task{display:flex;align-items:center;gap:9px;padding:7px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
   .task:last-child{border-bottom:none}
   .task .kind{flex-shrink:0;width:16px;text-align:center}
@@ -653,6 +655,8 @@ let opLocalSeq = 0;
 let opTimer = null;
 const opPrev = new Map();
 let opDoneCount = 0, opFailCount = 0;
+let opsHydrated = false;   // 首屏是否已回填过
+let opsTry = 0;            // 首屏回填的重试次数上限
 
 const OP_ICON = { install: "⤓", update: "🔄", uninstall: "🗑" };
 
@@ -703,6 +707,21 @@ async function submitOp(kind, p){
   pollOps();
 }
 
+async function clearOps(){
+  try {
+    const r = await apiFetch("api/tasks/clear", { method:"POST" });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) { toast("✗ 清除失败：" + String(d.error || ("HTTP " + r.status))); return; }
+    // 服务端只删已结束的记录，这里同步把本地对应行也丢掉
+    const gone = new Set((d.cleared || []).map(String));
+    ops = ops.filter(t => !gone.has(String(t.id)));
+    pendingOps = pendingOps.filter(x => x.state === "queued" || !gone.has(String(x.serverId || x.id)));
+    opPrev.clear(); opDoneCount = 0; opFailCount = 0;
+    renderDock();
+    toast(gone.size ? "已清除 " + gone.size + " 条记录" : "没有可清除的记录");
+  } catch(e){ toast("✗ 清除失败：" + String((e && e.message) || e)); }
+}
+
 function allRows(){
   const known = new Set(ops.map(t => t.id));
   return ops.concat(pendingOps.filter(r => !r.serverId || !known.has(r.serverId)));
@@ -715,6 +734,7 @@ function activeCount(){
 function pollOps(initial){
   if (opTimer && !initial) return;
   clearTimeout(opTimer);
+  if (initial) opsTry++;
   opTimer = setTimeout(async ()=>{
     opTimer = null;
     try {
@@ -736,8 +756,11 @@ function pollOps(initial){
           pendingOps = pendingOps.filter(x => !x.serverId || !serverIds.has(x.serverId));
         }
       }
-    } catch(e){ /* 宿主忙或断连，下一轮再试 */ }
+    } catch(e){ /* 宿主忙或断连：下面按情况重试 */ }
     renderDock();
+    // 首屏回填只发一次请求，撞上限时（宿主正在发 21MB 快照、或插件刚被 HMR 重启）
+    // 会拉到空列表；不重试的话面板就一直空着，用户看到的就是"记录时有时无"。
+    if (initial && !ops.length && activeCount() === 0 && opsTry < 4) { setTimeout(()=>pollOps(true), 1800); return; }
     if (activeCount() > 0) { pollOps(); return; }
     if (!initial && (opDoneCount || opFailCount)) {
       const dn = opDoneCount, fl = opFailCount;
@@ -1117,6 +1140,7 @@ function filtered(){
 /* ---------- 渲染 ---------- */
 function render(){
   if (!DATA) return;
+  if (HOST && !opsHydrated){ opsHydrated = true; pollOps(true); }
   const isBrowse = state.tab==="discover" || state.tab==="theme";
   /* 分类 chip 行只在发现页显示：主题页是预览图墙，不需要按分类切。
      这里必须写 "flex"（.cats 是 flex-wrap 容器）——之前另加一行把它设成 "block"，
@@ -1764,11 +1788,13 @@ function renderDock(){
   const body = document.getElementById("dock-body");
   let html = "";
   if (rows.length){
-    html += `<div class="dock-sec">任务 · 安装/更新/卸载实时进度（百分比按 pnpm 阶段估算）</div>`;
+    const busy = rows.some(t => t.state === "queued" || t.state === "running");
+    html += `<div class="dock-sec">任务 · 安装/更新/卸载实时进度（百分比按 pnpm 阶段估算）` +
+      `<button class="clr" id="ops-clear" title="只清除已结束的记录，正在跑与排队中的保留">${busy ? "清除已完成" : "清除记录"}</button></div>`;
     html += rows.map(opRowHtml).join("");
   }
   html += `<div class="dock-sec">待装清单</div>`;
-  if (queue.size){
+  if (queue.size && DATA){
     const qlist = DATA.plugins.filter(p=>queue.has(p.name));
     html += qlist.map(p=>`<div class="dq"><span class="nm">${esc(p.name)}</span><span class="cmd">${esc(p.install||"待补 commit")}</span><button class="rm" data-q="${esc(p.name)}" title="移除">✕</button></div>`).join("");
   } else {
@@ -1780,6 +1806,8 @@ function renderDock(){
     queue.delete(b.dataset.q); save("dsh-queue", queue); renderDock();
     if(state.tab!=="submit"&&state.tab!=="advanced") draw(filtered());
   });
+  const clr = document.getElementById("ops-clear");
+  if (clr) clr.onclick = e => { e.stopPropagation(); clearOps(); };
   body.querySelectorAll(".retry").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     const name = b.dataset.retry, kind = b.dataset.kind;
@@ -1790,6 +1818,8 @@ function renderDock(){
 function toggleDock(){
   document.getElementById("dock").classList.toggle("open");
   renderDock();
+  // 展开就重新拉一次：历史记录在服务端，页面状态在本地，两边都可能落后
+  if (HOST) pollOps(true);
 }
 function copyAllQueue(e){
   e.stopPropagation();
