@@ -33,6 +33,7 @@
   html.inframe .mask{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
   html.inframe .dock{position:absolute;top:calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px);bottom:auto;transform:translate(-50%,-100%)}
   html.inframe .toast{position:absolute;top:calc(var(--vis-top,0px) + 74px);bottom:auto}
+  html.inframe .lb{display:none;position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto;inset:auto}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
@@ -194,6 +195,38 @@
   .empty{text-align:center;color:var(--fg3);padding:60px 0;font-size:14px}
 
   /* ---------- 待装栏 ---------- */
+  /* ---------- 主题画廊 ---------- */
+  .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .tcard{background:var(--bg2);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;cursor:pointer}
+  .tcard:hover{border-color:var(--line2);box-shadow:var(--shadow-lg)}
+  .tcover{position:relative;aspect-ratio:16/10;background:#0e1417;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid var(--line)}
+  .tcover img{width:100%;height:100%;object-fit:cover;display:block}
+  .tcover .noprev{color:var(--fg3);font-size:12.5px;letter-spacing:.5px}
+  .tcover.loading .noprev{color:#7f8c96}
+  .tcover .nprev{position:absolute;left:9px;bottom:9px;background:rgba(8,20,26,.78);color:#fff;font-size:11px;padding:2px 8px;border-radius:20px}
+  .tcover .pv{position:absolute;right:9px;bottom:9px;background:rgba(8,20,26,.78);color:#fff;border:none;font-size:11.5px;padding:4px 10px;border-radius:20px;cursor:pointer}
+  .tcover .pv:hover{background:var(--accent)}
+  .tbody{padding:11px 13px 13px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .tname{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tby{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--fg3);flex-wrap:wrap}
+  .tby .own{color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+  .tby img{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+  .tdesc{font-size:12.5px;color:var(--fg2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
+  .tfoot{display:flex;align-items:center;gap:8px;margin-top:auto}
+  .tstat{font-size:11.5px;color:var(--fg3);flex-shrink:0}
+  .tstat.on{color:#2fa36b}
+  .tstat.upd{color:var(--accent)}
+  .tfoot .btns{margin-left:auto}
+  .tfoot .install-btn{min-width:74px}
+  /* 灯箱：宿主内必须罩在可见窗口上（与 .mask/.dock 同一套 --vis-top/--vis-h） */
+  .lb{display:none;position:fixed;inset:0;background:rgba(6,14,18,.86);z-index:70;align-items:center;justify-content:center;padding:26px}
+  .lb.show{display:flex}
+  .lb-inner{max-width:min(1100px,94vw);display:flex;flex-direction:column;gap:10px}
+  .lb-inner img{max-width:100%;max-height:72vh;border-radius:10px;background:#0e1417;object-fit:contain}
+  .lbbar{display:flex;align-items:center;gap:10px;color:#dbe7ea;font-size:12.5px;flex-wrap:wrap}
+  .lbbar .sp{flex:1}
+  .lbbar button,.lbbar a{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:12px;padding:4px 11px;border-radius:7px;cursor:pointer;text-decoration:none;font-family:inherit}
+  .lbbar button:hover,.lbbar a:hover{background:var(--accent);border-color:var(--accent)}
   .dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow-lg);z-index:60;width:min(640px,94vw);overflow:hidden}
   .dock-head{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;user-select:none}
   .dock-head:hover{background:var(--bg)}
@@ -213,24 +246,24 @@
      所以文案写"阶段 + 百分比（估算）"，不要伪装成精确下载进度 */
   .dock.has-ops .dock-body{max-height:min(46vh,420px)}
   .dock-sec{padding:6px 16px 2px;font-size:11px;color:var(--fg3);letter-spacing:.4px;background:var(--bg2);position:sticky;top:0;border-bottom:1px solid var(--line)}
-  .op{display:flex;align-items:center;gap:9px;padding:7px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
-  .op:last-child{border-bottom:none}
-  .op .kind{flex-shrink:0;width:16px;text-align:center}
-  .op .nm{font-family:var(--mono);font-weight:600;flex-shrink:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .op .bar{flex:1;height:6px;border-radius:4px;background:var(--line);overflow:hidden;min-width:60px}
+  .task{display:flex;align-items:center;gap:9px;padding:7px 16px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .task:last-child{border-bottom:none}
+  .task .kind{flex-shrink:0;width:16px;text-align:center}
+  .task .nm{font-family:var(--mono);font-weight:600;flex-shrink:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .task .bar{flex:1;height:6px;border-radius:4px;background:var(--line);overflow:hidden;min-width:60px}
   .op .bar i{display:block;height:100%;background:var(--accent);transition:width .3s ease}
-  .op.running .bar i{background:linear-gradient(90deg,var(--accent),#3fb8a8)}
-  .op.done .bar i{background:#2fa36b}
-  .op.failed .bar i{background:var(--danger)}
-  .op .st{flex-shrink:0;font-size:11.5px;color:var(--fg3);min-width:96px;text-align:right}
-  .op.failed .st{color:var(--danger)}
-  .op.done .st{color:#2fa36b}
-  .op .retry{flex-shrink:0;background:none;border:1px solid var(--line2);border-radius:6px;color:var(--fg2);font-size:11.5px;padding:2px 8px;cursor:pointer}
-  .op .retry:hover{border-color:var(--accent);color:var(--accent)}
-  .op-err{padding:0 16px 8px 41px;font-size:11.5px;color:var(--danger);line-height:1.5;word-break:break-word}
-  .op-err b{color:var(--fg2);font-weight:600}
-  .op-err code{font-family:var(--mono);font-size:11px;color:var(--fg3)}
-  .op-note{padding:0 16px 8px 41px;font-size:11.5px;color:var(--fg3)}
+  .task.running .bar i{background:linear-gradient(90deg,var(--accent),#3fb8a8)}
+  .task.done .bar i{background:#2fa36b}
+  .task.failed .bar i{background:var(--danger)}
+  .task .st{flex-shrink:0;font-size:11.5px;color:var(--fg3);min-width:96px;text-align:right}
+  .task.failed .st{color:var(--danger)}
+  .task.done .st{color:#2fa36b}
+  .task .retry{flex-shrink:0;background:none;border:1px solid var(--line2);border-radius:6px;color:var(--fg2);font-size:11.5px;padding:2px 8px;cursor:pointer}
+  .task .retry:hover{border-color:var(--accent);color:var(--accent)}
+  .task-err{padding:0 16px 8px 41px;font-size:11.5px;color:var(--danger);line-height:1.5;word-break:break-word}
+  .task-err b{color:var(--fg2);font-weight:600}
+  .task-err code{font-family:var(--mono);font-size:11px;color:var(--fg3)}
+  .task-note{padding:0 16px 8px 41px;font-size:11.5px;color:var(--fg3)}
 
   /* ---------- 筛选面板 ---------- */
   .panel-mask{position:fixed;inset:0;background:rgba(23,35,55,.32);display:none;z-index:80}
@@ -399,6 +432,8 @@
 </div>
 
 <!-- 待装栏 -->
+<div class="lb" id="lb"><div class="lb-inner" id="lb-inner"></div></div>
+
 <div class="dock" id="dock">
   <div class="dock-head" onclick="toggleDock()">
     <span class="ttl">⤓ 待安装<span class="n" id="qcnt">0</span></span>
@@ -718,16 +753,16 @@ function opRowHtml(t){
   else st = t.phaseText || "排队中";
   const retry = t.state === "failed"
     ? `<button class="retry" data-retry="${esc(String(t.name))}" data-kind="${esc(t.kind)}">重试</button>` : "";
-  let html = `<div class="op ${esc(t.state)}"><span class="kind">${OP_ICON[t.kind] || "•"}</span>` +
+  let html = `<div class="task ${esc(t.state)}"><span class="kind">${OP_ICON[t.kind] || "•"}</span>` +
     `<span class="nm" title="${esc(String(t.name))}">${esc(String(t.name))}</span>` +
     `<span class="bar"><i style="width:${pct}%"></i></span><span class="st">${esc(st)}</span>${retry}</div>`;
   if (t.state === "failed") {
-    html += `<div class="op-err"><b>${esc(t.error || "执行失败")}</b>` +
+    html += `<div class="task-err"><b>${esc(t.error || "执行失败")}</b>` +
       (t.hint ? "：" + esc(t.hint) : "") +
       (t.detail ? `<br>${esc(t.detail)}` : "") +
       (t.logFile ? `<br><code>${esc(t.logFile)}</code>` : "") + `</div>`;
   } else if (t.state === "done" && t.note) {
-    html += `<div class="op-note">${esc(t.note)}</div>`;
+    html += `<div class="task-note">${esc(t.note)}</div>`;
   }
   return html;
 }
@@ -1079,6 +1114,8 @@ function render(){
   const isBrowse = state.tab==="discover" || state.tab==="theme";
   document.getElementById("cats-zone").style.display = isBrowse ? "flex" : "none";
   document.getElementById("toolbar").style.display = state.tab==="advanced"||state.tab==="submit" ? "none" : "flex";
+  const catsEl = document.getElementById("cats-zone");
+  if (catsEl) catsEl.style.display = state.tab==="theme" ? "none" : "block";
   document.getElementById("hscroll-zone").style.display = "none";
   document.getElementById("submit-zone").style.display = "none";
   document.getElementById("rows").style.display = "none";
@@ -1120,7 +1157,7 @@ function render(){
   document.getElementById("count-line").textContent = `第 ${from}–${to} 个 / 共 ${list.length} 个插件${extra}`;
   if (state.tab==="theme"){
     document.getElementById("note-line").style.display = "block";
-    document.getElementById("note-line").textContent = "主题页展示「界面增强」分类与 theme/appearance 标签的插件，共 " + list.length + " 个";
+    document.getElementById("note-line").textContent = "主题页收录带主题 / 皮肤 / 壁纸特征的插件，共 " + list.length + " 款；封面取自各仓库 README，抓不到图就显示「暂无预览」";
   } else if (isBrowse && state.dshVer && (state._hiddenByCompat||0)>0){
     document.getElementById("note-line").style.display = "block";
     document.getElementById("note-line").textContent = "⚠️ 已按 DSH " + esc(state.dshVer) + " 兼容过滤，隐藏了 " + (state._hiddenByCompat||0) + " 个声明不兼容的插件（未声明宿主要求的插件仍显示，与 dsh-market 口径一致）";
@@ -1250,45 +1287,189 @@ function scrollTopOfList(){
   const y = anchor ? anchor.getBoundingClientRect().top + window.scrollY - 64 : 0;
   window.scrollTo({ top: Math.max(0, y), behavior: "auto" });
 }
-function draw(list){
-  const rowsEl = document.getElementById("rows");
+/* ---------- 主题画廊（照 dsh-market 的实现）----------
+   dsh-market 的「主题」页不是发现页换个过滤，而是**预览图墙**：成员按 theme 分类，
+   封面从插件仓库的 README 里抓图，按语义词 + 横版尺寸打分，最多 6 张，点开是灯箱
+   （见 dshmarket/src/client/market-data.ts 的 extractReadmeImages / previewDimensionScore，
+   以及 MarketSection.tsx 的 themePluginCard / ThemeCover）。
+   这里同一套路：README 走 raw.githubusercontent（无需 token，抓不到就"暂无预览"），
+   抓取在浏览器里按页做，仓库级缓存 + 并发上限 4，不打爆 GitHub。 */
+const THEME_RE = /themes?|skins?|wallpaper|appearance|cosmetic|样式|主题|皮肤|壁纸|换肤|外观/i;
+const SHOT_WORDS = /preview|screen-?shots?|shots?|demo|showcase|gallery|theme|skin|appearance|效果|预览|截图|演示|展示|界面|主题|皮肤/i;
+const SHOT_HOSTS = new Set(["raw.githubusercontent.com","github.com","user-images.githubusercontent.com","camo.githubusercontent.com","objects.githubusercontent.com"]);
+const MAX_SHOTS = 6;
+const SHOT_CONCURRENCY = 4;
+const shots = new Map();           // repo -> {urls:[], tried:true}
+let shotQueue = [], shotBusy = 0;
+
+function isThemePlugin(p){
+  const hay = (p.name||"") + " " + (p.title||"") + " " + (p.titleEn||"") + " " + (p.tags||[]).join(" ");
+  if (THEME_RE.test(hay)) return true;
+  // 只在看板/界面类里才允许靠描述进主题页，否则随便一句 "themed UI" 就混进来
+  return p.cat === "interface" && THEME_RE.test((p.desc||"") + " " + (p.descEn||""));
+}
+function readmeUrl(repo){ return "https://raw.githubusercontent.com/" + repo + "/HEAD/README.md"; }
+/* README 里的图片路径基准是**仓库里的文件位置**，不是仓库主页：
+   `docs/screenshots/x.png` 必须解析成 raw.githubusercontent.com/<repo>/HEAD/docs/screenshots/x.png。
+   按 github.com/<repo> 解析会把仓库名当目录吃掉，变成 github.com/<owner>/docs/... 死链，
+   于是 24 张封面只有 4 张（README 里写死绝对 raw 链接的）出得来图。 */
+function absImageSrc(src, repo){
+  if (!src) return null;
+  let s = String(src).trim().replace(/^<|>$/g, "");
+  if (!s || /^data:/i.test(s) || /^mailto:/i.test(s)) return null;
+  const rawBase = "https://raw.githubusercontent.com/" + repo + "/HEAD/";
+  if (/^https?:\/\//i.test(s)) {
+    // blob 页不是图片直链，换成 raw 才加载得动
+    s = s.replace(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/[^/]+\/(.+)$/i,
+      (m, r, p) => rawBase + p);
+  } else if (s.startsWith("//")) {
+    s = "https:" + s;
+  } else if (s.startsWith("/")) {
+    // README 里 "/assets/x.png" 的惯例是仓库根相对，不是站点根
+    s = rawBase + s.replace(/^\/+/, "");
+  } else {
+    s = rawBase + s.replace(/^\.\//, "");
+  }
+  let u;
+  try { u = new URL(s); } catch(e){ return null; }
+  if (u.protocol !== "https:") return null;
+  if (!SHOT_HOSTS.has(u.hostname)) return null;
+  return u.href;
+}
+function extractReadmeImages(md, repo){
+  const found = [];
+  const push = (src, alt) => {
+    const href = absImageSrc(src, repo);
+    if (!href || found.some(o => o.href === href)) return;
+    let score = 0;
+    if (SHOT_WORDS.test(alt || "")) score += 2;
+    if (SHOT_WORDS.test(href)) score += 1;
+    found.push({ href, score });
+  };
+  for (const m of md.matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) push(m[2], m[1]);
+  for (const m of md.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) push(m[1], "");
+  found.sort((a,b)=>b.score - a.score);
+  return found.slice(0, MAX_SHOTS).map(o=>o.href);
+}
+function queueShots(repo){
+  if (!repo || shots.has(repo) || shotQueue.indexOf(repo) >= 0) return;
+  shotQueue.push(repo);
+  pumpShots();
+}
+function pumpShots(){
+  while (shotBusy < SHOT_CONCURRENCY && shotQueue.length){
+    const repo = shotQueue.shift();
+    shotBusy++;
+    (async ()=>{
+      const rec = { urls: [], tried: true };
+      try {
+        const r = await fetch(readmeUrl(repo), { cache: "no-store" });
+        if (r.ok) rec.urls = extractReadmeImages(await r.text(), repo);
+      } catch(e){ /* 抓不到就留"暂无预览"，不重试轰炸 GitHub */ }
+      shots.set(repo, rec);
+      shotBusy--;
+      paintRepoCovers(repo);
+      pumpShots();
+    })();
+  }
+}
+function paintRepoCovers(repo){
+  document.querySelectorAll('.tcover[data-repo="' + CSS.escape(repo) + '"]').forEach(el => fillCover(el));
+}
+function fillCover(el){
+  const repo = el.dataset.repo;
+  const rec = repo ? shots.get(repo) : null;
+  if (!repo){ el.className = "tcover empty"; el.innerHTML = '<span class="noprev">无仓库</span>'; return; }
+  if (!rec){ el.className = "tcover loading"; el.innerHTML = '<span class="noprev">读取预览…</span>'; queueShots(repo); return; }
+  if (!rec.urls.length){ el.className = "tcover empty"; el.innerHTML = '<span class="noprev">暂无预览</span>'; return; }
+  pickCover(el, rec.urls, 0);
+}
+function pickCover(el, urls, i){
+  if (i >= urls.length){ el.className = "tcover empty"; el.innerHTML = '<span class="noprev">暂无预览</span>'; return; }
+  const src = urls[i];
+  const img = new Image();
+  img.onload = () => {
+    const ar = img.naturalWidth / (img.naturalHeight || 1);
+    // 主题封面得像一整块桌面：横版且够宽。徽章、logo、竖长截图当封面只会很难看
+    if (img.naturalWidth >= 480 && ar >= 1.15) showCover(el, src, urls);
+    else pickCover(el, urls, i + 1);
+  };
+  img.onerror = () => pickCover(el, urls, i + 1);
+  img.src = src;
+}
+function showCover(el, src, urls){
+  el.className = "tcover";
+  el.innerHTML = `<img src="${esc(src)}" alt="" loading="lazy">` +
+    (urls.length > 1 ? `<span class="nprev">${urls.length} 张预览</span>` : "") +
+    `<button class="pv" data-pv="${esc(el.dataset.repo)}">🔍 预览</button>`;
+  el.querySelectorAll(".pv").forEach(b => b.onclick = e => { e.stopPropagation(); openLightbox(b.dataset.pv); });
+  const bad = el.querySelector("img");
+  if (bad) bad.onerror = () => { el.className = "tcover empty"; el.innerHTML = '<span class="noprev">暂无预览</span>'; };
+}
+function themeCardHtml(p, i){
+  const repo = p.repo || "";
+  const desc = pickDesc(p) || "无描述";
+  const st = isInstalled(p)
+    ? (HOST && updateAvailable(p) ? '<span class="tstat upd">可升级</span>' : '<span class="tstat on">已安装</span>')
+    : '<span class="tstat">未安装</span>';
+  return `<div class="tcard" data-i="${i}">
+    <div class="tcover" data-repo="${esc(repo)}"></div>
+    <div class="tbody">
+      <div class="tname" title="${esc(p.name)}">${esc(p.title || p.name)}</div>
+      <div class="tby">${avatarHtml(p)}<span class="own">${esc(p.author || repo.split("/")[0] || "")}</span>
+        <span>v${esc(p.version || "-")}</span><span>★ ${fmtN(p.stars)}</span>
+        ${p.downloads ? `<span>↓ ${fmtN(p.downloads)}</span>` : ""}</div>
+      <div class="tdesc" title="${esc(desc)}">${esc(desc)}</div>
+      <div class="tfoot">${st}${mainBtnHtml(p, i)}${opsHtml(p)}</div>
+    </div>
+  </div>`;
+}
+function drawThemes(list){
   const gridEl = document.getElementById("grid");
-  rowsEl.style.display = state.view==="row" ? "flex" : "none";  gridEl.style.display = state.view==="card" ? "grid" : "none";
-  let rh="", gh="";
-  // data-i 用的是全列表的绝对下标，点击处仍按 list[i] 取值，翻页不影响取数
+  const rowsEl = document.getElementById("rows");
+  rowsEl.style.display = "none";
+  rowsEl.innerHTML = "";
+  gridEl.style.display = "grid";
+  gridEl.className = "tgrid";
   const start = (state.page - 1) * state.perPage;
   const end = Math.min(start + state.perPage, list.length);
-  for (let i=start;i<end;i++){
-    const p = list[i];
-    const instBtn = mainBtnHtml(p, i);
-    const desc = pickDesc(p) || "无描述";
-    const verLine = p.verified ? `<span class="vf">${esc(p.verified)}</span>` : "";
-    rh += `<div class="row" data-i="${i}">
-      <div class="row-main">
-        <div class="row-top">${iconHtml(p)}${avatarHtml(p)}<span class="pname">${esc(p.name)}</span>${badges(p)}<span class="cat-tag">${esc(catName(p.cat))}</span></div>
-        <div class="pdesc">${esc(desc)}</div>
-        <div class="row-pills">${pills(p)}</div>
-        <div class="row-tags">${(p.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
-        <div class="row-meta"><span class="stars">${p.stars||0}</span><span class="upd">${esc((p.updated||"-").slice(0,10))}</span>${verLine}<span>${p.source==="npm"?"npm 安装":"GitHub 仓库"}</span></div>
-      </div>
-      <div class="row-side">${instBtn}${opsHtml(p)}</div>
-    </div>`;
-    gh += `<div class="card" data-i="${i}">
-      <div class="ctop">${iconHtml(p)}${avatarHtml(p)}<span class="pname">${esc(p.name)}</span><span class="badges">${badges(p)}</span></div>
-      <div class="pdesc">${esc(desc)}</div>
-      <div class="pills">${pills(p)}</div>
-      <div class="cmeta"><span class="stars">${p.stars||0}</span><span>${esc(catName(p.cat))}</span><span>${esc((p.updated||"-").slice(0,10))}</span>${p.verified?`<span class="vf">${esc(p.verified)}</span>`:""}</div>
-      ${mainBtnHtml(p, i)}
-      ${opsHtml(p)}
-    </div>`;
-  }
-  rowsEl.innerHTML = rh;
+  let gh = "";
+  for (let i = start; i < end; i++) gh += themeCardHtml(list[i], i);
   gridEl.innerHTML = gh;
+  gridEl.querySelectorAll(".tcover").forEach(el => fillCover(el));
+  wireCards(list, gridEl);
+}
+
+/* ---------- 预览灯箱 ---------- */
+let lbUrls = [], lbIdx = 0;
+function openLightbox(repo){
+  const rec = shots.get(repo);
+  if (!rec || !rec.urls.length) return;
+  lbUrls = rec.urls; lbIdx = 0;
+  paintLightbox();
+  document.getElementById("lb").classList.add("show");
+}
+function paintLightbox(){
+  const el = document.getElementById("lb-inner");
+  el.innerHTML = `<img src="${esc(lbUrls[lbIdx])}" alt="">
+    <div class="lbbar"><span>${lbIdx + 1} / ${lbUrls.length}</span>
+      <span class="sp"></span>
+      ${lbUrls.length > 1 ? '<button id="lb-prev">‹ 上一张</button><button id="lb-next">下一张 ›</button>' : ""}
+      <a href="${esc(lbUrls[lbIdx])}" target="_blank" rel="noopener">原图 ↗</a>
+      <button id="lb-x">✕ 关闭</button></div>`;
+  const x = document.getElementById("lb-x"); if (x) x.onclick = closeLightbox;
+  const pv = document.getElementById("lb-prev"); if (pv) pv.onclick = () => { lbIdx = (lbIdx - 1 + lbUrls.length) % lbUrls.length; paintLightbox(); };
+  const nx = document.getElementById("lb-next"); if (nx) nx.onclick = () => { lbIdx = (lbIdx + 1) % lbUrls.length; paintLightbox(); };
+}
+function closeLightbox(){ document.getElementById("lb").classList.remove("show"); }
+function wireCards(list, gridEl){
+  const rowsEl = document.getElementById("rows");
+  gridEl = gridEl || document.getElementById("grid");
   rowsEl.querySelectorAll(".row").forEach(el=>el.onclick=e=>{
     if (e.target.closest("button")) return;
     openModalByPlugin(list[+el.dataset.i]);
   });
-  gridEl.querySelectorAll(".card").forEach(el=>el.onclick=e=>{
+  gridEl.querySelectorAll(".card, .tcard").forEach(el=>el.onclick=e=>{
     if (e.target.closest("button")) return;
     openModalByPlugin(list[+el.dataset.i]);
   });
@@ -1322,6 +1503,44 @@ function draw(list){
     if (op==="blocked") render(); else draw(filtered());
     renderDock();
   });
+}
+
+function draw(list){
+  if (state.tab === "theme"){ drawThemes(list); return; }
+  const rowsEl = document.getElementById("rows");
+  const gridEl = document.getElementById("grid");
+  rowsEl.style.display = state.view==="row" ? "flex" : "none";  gridEl.style.display = state.view==="card" ? "grid" : "none";
+  let rh="", gh="";
+  // data-i 用的是全列表的绝对下标，点击处仍按 list[i] 取值，翻页不影响取数
+  const start = (state.page - 1) * state.perPage;
+  const end = Math.min(start + state.perPage, list.length);
+  for (let i=start;i<end;i++){
+    const p = list[i];
+    const instBtn = mainBtnHtml(p, i);
+    const desc = pickDesc(p) || "无描述";
+    const verLine = p.verified ? `<span class="vf">${esc(p.verified)}</span>` : "";
+    rh += `<div class="row" data-i="${i}">
+      <div class="row-main">
+        <div class="row-top">${iconHtml(p)}${avatarHtml(p)}<span class="pname">${esc(p.name)}</span>${badges(p)}<span class="cat-tag">${esc(catName(p.cat))}</span></div>
+        <div class="pdesc">${esc(desc)}</div>
+        <div class="row-pills">${pills(p)}</div>
+        <div class="row-tags">${(p.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+        <div class="row-meta"><span class="stars">${p.stars||0}</span><span class="upd">${esc((p.updated||"-").slice(0,10))}</span>${verLine}<span>${p.source==="npm"?"npm 安装":"GitHub 仓库"}</span></div>
+      </div>
+      <div class="row-side">${instBtn}${opsHtml(p)}</div>
+    </div>`;
+    gh += `<div class="card" data-i="${i}">
+      <div class="ctop">${iconHtml(p)}${avatarHtml(p)}<span class="pname">${esc(p.name)}</span><span class="badges">${badges(p)}</span></div>
+      <div class="pdesc">${esc(desc)}</div>
+      <div class="pills">${pills(p)}</div>
+      <div class="cmeta"><span class="stars">${p.stars||0}</span><span>${esc(catName(p.cat))}</span><span>${esc((p.updated||"-").slice(0,10))}</span>${p.verified?`<span class="vf">${esc(p.verified)}</span>`:""}</div>
+      ${mainBtnHtml(p, i)}
+      ${opsHtml(p)}
+    </div>`;
+  }
+  rowsEl.innerHTML = rh;
+  gridEl.innerHTML = gh;
+  wireCards(list);
 }
 function catName(k){ const c = DATA.categories[k]; return c ? c.zh : (k || "目录外安装"); }
 function copyText(t, btn, okText){
@@ -1523,6 +1742,7 @@ document.getElementById("l-tr").onclick = async (e)=>{
 };
 document.getElementById("close").onclick = ()=>document.getElementById("mask").classList.remove("show");
 document.getElementById("mask").onclick = e=>{ if(e.target===e.currentTarget) document.getElementById("mask").classList.remove("show"); };
+document.getElementById("lb").onclick = e=>{ if(e.target===e.currentTarget) closeLightbox(); };
 
 /* ---------- 待装栏 ---------- */
 function renderDock(){
@@ -1878,7 +2098,7 @@ function setView(v){
 document.getElementById("cp-idx").onclick = e=>{
   copyText(document.getElementById("idx-url").textContent, e.target, "✓ 已复制");
 };
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ closePanel(); document.getElementById("mask").classList.remove("show"); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ if(document.getElementById("lb").classList.contains("show")){ closeLightbox(); return; } closePanel(); document.getElementById("mask").classList.remove("show"); } });
 load();
 </script>
 </body>
