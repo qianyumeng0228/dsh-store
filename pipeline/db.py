@@ -23,6 +23,10 @@ PLUGIN_NEW_COLS = {
     "git_probed": "TEXT",
     "git_version": "TEXT",       # 锁定 commit 上 package.json#version
     "git_ver_commit": "TEXT",    # git_version 读自哪个 commit（commit 变了才重读）
+    # 补 commit 连续失败的死信标记：删库/改名/私有的仓库若不记下来，
+    # 每轮都会按 stars 重新排进批次名额里白跑一遍
+    "git_dead_at": "TEXT",       # 判定为死仓库的日期（YYYY-MM-DD），空=未判定
+    "git_fail_count": "INTEGER", # 连续失败次数，成功一次即清零
 }
 
 

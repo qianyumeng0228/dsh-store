@@ -61,6 +61,53 @@ DSHOPEN_FILE = RAW_DIR / "dshopen.json"
 AWESOME_URL = "https://awesome-dsh-plugin.com/plugins.json"
 AWESOME_FILE = RAW_DIR / "awesome-plugins.json"
 
+# ---------- 发现通道（补"漏网之鱼"） ----------
+# 把全生态所有机器可读的索引地址逐个实测过覆盖率：本目录已覆盖其中 92~96%，
+# 但下面几个地址一直没直接接，各自还能带来 220~740 条净新增。
+# 外部索引一律只当**候选**（status='pending'），由 discover.verify_pending 读
+# package.json 判真后才升 verified —— 判定口径与 scan_new 一致，不轻信第三方索引。
+EXTRA_INDEX_SOURCES = (
+    ("catalog", "https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json", "format1"),
+    ("dshmarket", "https://dshmarket.com/index.json", "format1"),
+    ("awesome-index", "https://awesome-dsh-plugin.com/index.json", "format1"),
+    ("yelebai",
+     "https://raw.githubusercontent.com/YELEBAI/dsh-plugin-marketplace/main/registry/plugins.json",
+     "topic_snapshot"),
+)
+EXTRA_INDEX_MAX = int(os.environ.get("EXTRA_INDEX_MAX", "8000"))
+
+# GitHub topic 扫描：原来只扫 topic:dsh-plugin。实测 topic:deepseek-harness
+# （21,791 个仓库）按更新时间取最近 100 个，有 47 个不在目录里。
+GIT_TOPIC_QUERIES = ("topic:dsh-plugin", "topic:deepseek-harness", "topic:dsh")
+GIT_SCAN_PAGES = int(os.environ.get("GIT_SCAN_PAGES", "3"))
+
+# GitHub code search 兜底：捞「没打 topic、但 package.json 里带 dsh 签名」的仓库。
+# 实测（本机用户态 token）：`"dsh": {"bundle"` 命中 1,574、`"dsh":{"bundle"` 249、
+# `"dsh":{"cli"` 36；而加 `path:package.json` 限定一律 0（code search 的 path 限定
+# 和这些带引号/花括号的串配不起来），所以只能靠 verify_pending 读 package.json 收口。
+# 命中率实测很低（100 个文件命中 → 11 个仓库 → 判真 1~2 个），所以只取每个查询
+# 第 1 页：它是"补漏的兜底"，不是主力通道，别让它吃掉整轮构建的时间。
+# Actions 的 GITHUB_TOKEN 是 installation token，code search 很可能直接 403，
+# 所以这条只当加分项，失败静默跳过、不影响其它通道。
+CODE_SEARCH_QUERIES = ('"dsh": {"bundle"', '"dsh":{"bundle"', '"dsh":{"cli"')
+CODE_SEARCH_PAGES = 1            # 每个查询取几页（100 条/页）
+CODE_SEARCH_MAX = 100            # per_page 上限
+
+# npm 关键词发现：管线此前从不查 npm search API，npm 条目只能靠三个种子或
+# GitHub 仓库反查带进来，实测约 8% 带官方关键词的 npm 包因此进不来。
+NPM_SEARCH_API = "https://registry.npmjs.org/-/v1/search"
+NPM_KEYWORDS = ("keywords:dsh-plugin", "keywords:deepseek-harness")
+NPM_DISCOVER_PAGES = int(os.environ.get("NPM_DISCOVER_PAGES", "20"))          # 250 条/页
+NPM_DISCOVER_MAX_NEW = int(os.environ.get("NPM_DISCOVER_MAX_NEW", "1200"))    # 单轮 packument 校验上限
+
+# 候选校验批量：probe_repo 走 raw.githubusercontent，不吃 API 限额，可以给大一点
+PENDING_VERIFY_BATCH = int(os.environ.get("PENDING_VERIFY_BATCH", "2500"))
+
+# git 补 commit 连续失败的仓库视为死信（删库/改名/私有）。此前失败不落任何标记，
+# 404 仓库每轮都被重新排进 2000 个名额里白跑一遍，越到长尾浪费越重。
+GIT_DEAD_RETRY_DAYS = 30
+GIT_DEAD_MAX_FAILS = 3
+
 # ---------- 分类（tags -> categories，中英双语） ----------
 # 参考 awesome-dsh-plugin.com 的 16 分类体系 + dsh.works 的 tags
 CATEGORY_DEFS = {

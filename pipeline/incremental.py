@@ -2,7 +2,8 @@
 """incremental.py —— 增量管道。
 1. --commit-only：给 git-only 插件补默认分支最新 commit（GitHub API）
    无 token 时受 60 req/h 限制，每轮只补最活跃的 N 个；有 token 补 5,000 上限。
-2. --scan-new：扫 GitHub topic:dsh-plugin 新仓库，探测 package.json 的 dsh 字段，入库。
+2. --scan-new：扫 GitHub topic 查询表（config.GIT_TOPIC_QUERIES）新仓库，
+   探测 package.json 的 dsh 字段，入库。
 3. --downloads：npm 插件近 30 天下载量（api.npmjs.org）。
 4. --updates：更新检测
    - npm：registry.npmjs.org/{pkg}/latest 刷新 npm_meta（latest/latest_since/checked），
@@ -17,11 +18,15 @@
 6. --gitver：从**锁定的 commit** 读 package.json#version 存 git_version（raw 请求，
    不占 API 限额）。git_ver_commit 记下读自哪个 commit，commit 没变不重读。
    build 据此填索引里 git 条目的 version，不再恒为占位 0.0.0。
-7. --all：commit-only + downloads + updates + icons + gitver + scan-new。
+7. --discover：四路发现（见 discover.py）——外部索引地址、GitHub code search、
+   npm 关键词爬取，新增一律先落 status='pending' 候选，再读 package.json 判真。
+8. --all：discover（含 scan-new）+ commit-only + downloads + updates + icons + gitver。
+   发现排在最前，本轮新收的 git 候选才能立刻进补 commit 流程。
 
 用法:
     python pipeline/incremental.py --commit-only
     python pipeline/incremental.py --scan-new
+    python pipeline/incremental.py --discover
     python pipeline/incremental.py --updates --icons
     python pipeline/incremental.py --gitver --gitver-batch 300
     python pipeline/incremental.py --all
@@ -134,20 +139,36 @@ def probe_repo(repo: str):
 
 
 def fill_commits(conn, limit):
-    """给 git-only 插件补 commit。按 stars 降序取 limit 个。"""
+    """给 git-only 插件补 commit。按 stars 降序取 limit 个。
+
+    失败（删库/改名/私有 → 404）要落死信标记：此前失败什么都不写，这些仓库每轮
+    都会按 stars 重新排进名额里白跑一遍，越到长尾浪费越重（实测抽样里 1/4 是死库）。
+    """
+    cutoff = _days_ago(config.GIT_DEAD_RETRY_DAYS)
     rows = conn.execute("""
         SELECT name, repo FROM plugins
         WHERE install_source='git' AND (git_commit IS NULL OR git_commit='')
+          AND (git_dead_at IS NULL OR git_dead_at='' OR git_dead_at < ?)
         ORDER BY stars DESC LIMIT ?
-    """, (limit,)).fetchall()
-    print(f"[commit] 待补 {limit} 个（按 stars 降序）")
+    """, (cutoff, limit)).fetchall()
+    dead_held = conn.execute(
+        "SELECT COUNT(*) FROM plugins WHERE git_dead_at IS NOT NULL AND git_dead_at!='' "
+        "AND git_dead_at >= ? AND (git_commit IS NULL OR git_commit='')", (cutoff,)).fetchone()[0]
+    print(f"[commit] 待补 {limit} 个（按 stars 降序；另有 {dead_held} 个死仓库在冷却期内被跳过）")
     ok = fail = 0
     for name, repo in rows:
         sha = repo_commit(repo)
         if sha:
-            conn.execute("UPDATE plugins SET git_commit=? WHERE name=?", (sha, name))
+            conn.execute("UPDATE plugins SET git_commit=?, git_dead_at='', git_fail_count=0 "
+                         "WHERE name=?", (sha, name))
             ok += 1
         else:
+            fails = (conn.execute("SELECT git_fail_count FROM plugins WHERE name=?",
+                                  (name,)).fetchone() or (0,))[0] or 0
+            fails += 1
+            dead = _today() if fails >= config.GIT_DEAD_MAX_FAILS else ""
+            conn.execute("UPDATE plugins SET git_fail_count=?, git_dead_at=? WHERE name=?",
+                         (fails, dead, name))
             fail += 1
         conn.commit()
         time.sleep(0.2)  # 轻微限速保护
@@ -155,70 +176,89 @@ def fill_commits(conn, limit):
     return ok
 
 
-def scan_new(conn, pages=3):
-    """扫 topic:dsh-plugin 最近更新的仓库，新仓库入库。"""
+def scan_new(conn, pages=None):
+    """扫 topic 查询表里最近更新的仓库，新仓库入库。
+
+    原来只扫 topic:dsh-plugin。实测 topic:deepseek-harness（21,791 个仓库）按更新时间
+    取最近 100 个，有 47 个不在目录里 —— 没打 dsh-plugin 这个 topic 的仓库整批漏掉。
+    """
+    pages = pages if pages is not None else config.GIT_SCAN_PAGES
     added = skipped = 0
-    for page in range(1, pages + 1):
-        q = urllib.parse.quote("topic:dsh-plugin")
-        data, _ = api_get(
-            f"{config.GITHUB_API}/search/repositories?q={q}&sort=updated&order=desc&per_page=100&page={page}")
-        if not isinstance(data, dict):
-            print(f"[scan] 第 {page} 页失败，停止")
-            break
-        items = data.get("items", [])
-        if not items:
-            break
-        for it in items:
-            full = it.get("full_name", "")
-            if not full:
-                continue
-            exists = conn.execute("SELECT 1 FROM plugins WHERE repo=?", (full,)).fetchone()
-            if exists:
-                continue
-            ev, npm, subdir, is_bundle = probe_repo(full)
-            if not ev:
-                print(f"[scan] 跳过（非插件）: {full}")
-                continue
-            desc = (it.get("description") or "")[:2000]
-            has_cjk = bool(CJK_RE.search(desc))
-            cat = "bundle" if is_bundle else "plugin"
-            tags = ["dsh-plugin"]
-            for t in (it.get("topics") or [])[:20]:
-                tags.append(str(t))
-            # 分类沿用 seed 的 tags -> category 映射，不再硬编码 tools
-            cat_key = config.DEFAULT_CATEGORY
-            for t in tags:
-                k = config.TAG_TO_CATEGORY.get(str(t).lower())
-                if k:
-                    cat_key = k
-                    break
-            stars = int(it.get("stargazers_count") or 0)
-            pushed = (it.get("pushed_at") or "")[:10]
-            created = (it.get("created_at") or "")[:10]
-            cur = conn.execute("""
-                INSERT OR IGNORE INTO plugins
-                (name, repo, path, description, category, official, added, status, evidence,
-                 npm, stars, stars_updated, pushed_at, tags, title_en, title_zh,
-                 desc_en, desc_zh, install_source, category_key, last_seen)
-                VALUES (?,?,?,?,?,0,?, 'verified', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                full.split("/")[-1], full, subdir, desc, cat, created, ev, npm or None,
-                stars, it.get("pushed_at") or "", pushed,
-                json.dumps(tags, ensure_ascii=False),
-                full.split("/")[-1].replace("dsh-", "").title(),
-                full.split("/")[-1], desc if not has_cjk else "", desc if has_cjk else "",
-                "npm" if npm else "git", cat_key, it.get("pushed_at") or "",
-            ))
-            # INSERT OR IGNORE 撞 name 时静默不插，此前仍 added+=1 -> 日志虚高
-            if cur.rowcount:
-                added += 1
-                print(f"[scan] 新增: {full} (stars={stars}, source={'npm' if npm else 'git'}"
-                      f"{', bundle' if is_bundle else ''}{', path=' + subdir if subdir else ''})")
-            else:
-                skipped += 1
-                print(f"[scan] 撞名未入库: {full} -> {full.split('/')[-1]}")
-        conn.commit()
-        time.sleep(2)  # search API 限速
+    for q_raw in config.GIT_TOPIC_QUERIES:
+        q = urllib.parse.quote(q_raw)
+        hit = 0
+        for page in range(1, pages + 1):
+            data, _ = api_get(
+                f"{config.GITHUB_API}/search/repositories?q={q}&sort=updated&order=desc&per_page=100&page={page}")
+            if not isinstance(data, dict):
+                print(f"[scan] {q_raw} 第 {page} 页失败，换下一个查询")
+                break
+            items = data.get("items", [])
+            if not items:
+                break
+            hit += len(items)
+            for it in items:
+                full = it.get("full_name", "")
+                if not full:
+                    continue
+                exists = conn.execute(
+                    "SELECT 1 FROM plugins WHERE lower(repo)=lower(?)", (full,)).fetchone()
+                if exists:
+                    continue
+                ev, npm, subdir, is_bundle = probe_repo(full)
+                if not ev:
+                    print(f"[scan] 跳过（非插件）: {full}")
+                    continue
+                desc = (it.get("description") or "")[:2000]
+                has_cjk = bool(CJK_RE.search(desc))
+                cat = "bundle" if is_bundle else "plugin"
+                tags = ["dsh-plugin"]
+                for t in (it.get("topics") or [])[:20]:
+                    tags.append(str(t))
+                # 分类沿用 seed 的 tags -> category 映射，不再硬编码 tools
+                cat_key = config.DEFAULT_CATEGORY
+                for t in tags:
+                    k = config.TAG_TO_CATEGORY.get(str(t).lower())
+                    if k:
+                        cat_key = k
+                        break
+                stars = int(it.get("stargazers_count") or 0)
+                pushed = (it.get("pushed_at") or "")[:10]
+                created = (it.get("created_at") or "")[:10]
+                # 展示名撞车时改用 owner-repo，和 build.py 的撞名前缀规则同一思路。
+                # 原来直接用仓库末段，撞名就被 INSERT OR IGNORE 静默丢掉 ——
+                # 实测一轮 3 个 topic 查询里有 28 个真实插件这么消失。
+                tail = full.split("/")[-1]
+                owner = full.split("/")[0]
+                disp = tail
+                if conn.execute("SELECT 1 FROM plugins WHERE lower(name)=? LIMIT 1",
+                                (tail.lower(),)).fetchone():
+                    disp = f"{owner}-{tail}"
+                cur = conn.execute("""
+                    INSERT OR IGNORE INTO plugins
+                    (name, repo, path, description, category, official, added, status, evidence,
+                     npm, stars, stars_updated, pushed_at, tags, title_en, title_zh,
+                     desc_en, desc_zh, install_source, category_key, last_seen)
+                    VALUES (?,?,?,?,?,0,?, 'verified', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    disp, full, subdir, desc, cat, created, ev, npm or None,
+                    stars, it.get("pushed_at") or "", pushed,
+                    json.dumps(tags, ensure_ascii=False),
+                    tail.replace("dsh-", "").title(),
+                    tail, desc if not has_cjk else "", desc if has_cjk else "",
+                    "npm" if npm else "git", cat_key, it.get("pushed_at") or "",
+                ))
+                # INSERT OR IGNORE 撞 name 时静默不插，此前仍 added+=1 -> 日志虚高
+                if cur.rowcount:
+                    added += 1
+                    print(f"[scan] 新增: {full} (stars={stars}, source={'npm' if npm else 'git'}"
+                          f"{', bundle' if is_bundle else ''}{', path=' + subdir if subdir else ''})")
+                else:
+                    skipped += 1
+                    print(f"[scan] 撞名未入库: {full} -> {disp}")
+            conn.commit()
+            time.sleep(2)  # search API 限速
+        print(f"[scan] 查询 {q_raw}：扫到 {hit} 个仓库")
     print(f"[scan] 新增 {added} 个（另有 {skipped} 个因撞名未入库）")
     return added
 
@@ -626,6 +666,8 @@ def main():
     ap.add_argument("--updates", action="store_true", help="npm + git 更新检测")
     ap.add_argument("--icons", action="store_true", help="仓库图标路径探测")
     ap.add_argument("--gitver", action="store_true", help="从锁定 commit 读 git 插件真实版本号")
+    ap.add_argument("--discover", action="store_true",
+                    help="四路发现：外部索引地址 + code search + npm 关键词 + 候选判真")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--git-batch", type=int, default=config.GIT_UPDATE_BATCH,
                     help="git 更新检测每轮仓库数（默认 config.GIT_UPDATE_BATCH）")
@@ -649,6 +691,20 @@ def main():
     ).fetchone()[0]
     print(f"[incremental] 库内 git 待补 commit: {git_pending} / 待读版本号: {ver_pending}")
 
+    # 发现先行：本轮新收的 git 候选才能马上进入下面的补 commit / 版本号流程
+    if args.scan_new or args.discover or args.all:
+        scan_new(conn)
+    if args.discover or args.all:
+        import discover
+        pending_before = conn.execute(
+            "SELECT COUNT(*) FROM plugins WHERE status='pending'").fetchone()[0]
+        stats = discover.run_all(conn, api_get, probe_repo)
+        print(f"[discover] 汇总: 候选存量 {pending_before} -> "
+              f"判真 {stats.get('verified')} / 判伪 {stats.get('rejected')} / "
+              f"索引源新增 {stats.get('extra_index')} / "
+              f"code search 新增 {stats.get('code_search')} / "
+              f"npm 关键词新增 {stats.get('npm_keyword')}")
+
     if args.commit_only or args.all:
         limit = config.GIT_COMMIT_BATCH_TOKEN if config.GITHUB_TOKEN else config.GIT_COMMIT_BATCH_NO_TOKEN
         fill_commits(conn, limit)
@@ -661,8 +717,6 @@ def main():
         icons_probe(conn, args.icon_batch)
     if args.gitver or args.all:
         fill_git_versions(conn, args.gitver_batch)
-    if args.scan_new or args.all:
-        scan_new(conn)
     conn.close()
 
 
