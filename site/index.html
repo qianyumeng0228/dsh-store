@@ -33,7 +33,13 @@
   html.inframe .mask{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
   html.inframe .dock{position:absolute;top:calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px);bottom:auto;transform:translate(-50%,-100%)}
   html.inframe .toast{position:absolute;top:calc(var(--vis-top,0px) + 74px);bottom:auto}
-  html.inframe .lb{display:none;position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto;inset:auto}
+  /* inset 是 top/right/bottom/left 的简写：同一条规则里写了 inset:auto，
+     就会把上面那几个偏移一起重置成 auto，灯箱盒子直接塌成零尺寸（看着像"点了没反应"）。
+     这里只覆盖需要的四个偏移 + 高度，不要再碰 inset。 */
+  html.inframe .lb{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
+  /* 特异性陷阱：html.inframe .lb 是 (0,2,1)，压过 .lb.show 的 (0,2,0)，
+     少了这条宿主内灯箱永远 display:none —— 浏览器里正常、DSH 里点了没反应 */
+  html.inframe .lb.show{display:flex}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
