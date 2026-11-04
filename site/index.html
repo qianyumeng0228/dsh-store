@@ -31,6 +31,11 @@
   html.inframe,html.inframe>body{overflow-y:hidden;height:auto}
   /* 宿主内：浮层按「当前可见窗口」定位，--vis-top / --vis-h 由 syncViewport() 维护 */
   html.inframe .mask{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
+  /* 宿主内 vh 指的是「整篇文档」（iframe 被撑到内容高度），不是用户看得见的那一段。
+     详情弹层原来的 max-height:86vh 因此在宿主里比可见窗口高出一大截，
+     上下两端都够不着（浮层罩住的是可见窗口，多出来的部分落在窗口外，文档又不滚）。
+     改成按 --vis-h 收口，弹层自带 overflow:auto，超出部分在弹层内部滚。 */
+  html.inframe .modal{max-height:calc(var(--vis-h,100vh) - 40px)}
   html.inframe .dock{position:absolute;top:var(--dock-top,calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px));bottom:auto;transform:translate(-50%,-100%)}
   html.inframe .toast{position:absolute;top:var(--toast-top,calc(var(--vis-top,0px) + 74px));bottom:auto}
   /* inset 是 top/right/bottom/left 的简写：同一条规则里写了 inset:auto，
@@ -40,6 +45,8 @@
   /* 特异性陷阱：html.inframe .lb 是 (0,2,1)，压过 .lb.show 的 (0,2,0)，
      少了这条宿主内灯箱永远 display:none —— 浏览器里正常、DSH 里点了没反应 */
   html.inframe .lb.show{display:flex}
+  /* 同理：灯箱图片的 72vh 在宿主里也是按整篇文档算的，会顶穿可见窗口。 */
+  html.inframe .lb-inner img{max-height:calc(var(--vis-h,100vh) - 130px)}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   button{font-family:inherit}
