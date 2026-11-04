@@ -1118,10 +1118,11 @@ function filtered(){
 function render(){
   if (!DATA) return;
   const isBrowse = state.tab==="discover" || state.tab==="theme";
-  document.getElementById("cats-zone").style.display = isBrowse ? "flex" : "none";
+  /* 分类 chip 行只在发现页显示：主题页是预览图墙，不需要按分类切。
+     这里必须写 "flex"（.cats 是 flex-wrap 容器）——之前另加一行把它设成 "block"，
+     把换行布局压成一列，发现页的选项就竖着排了。 */
+  document.getElementById("cats-zone").style.display = state.tab==="discover" ? "flex" : "none";
   document.getElementById("toolbar").style.display = state.tab==="advanced"||state.tab==="submit" ? "none" : "flex";
-  const catsEl = document.getElementById("cats-zone");
-  if (catsEl) catsEl.style.display = state.tab==="theme" ? "none" : "block";
   document.getElementById("hscroll-zone").style.display = "none";
   document.getElementById("submit-zone").style.display = "none";
   document.getElementById("rows").style.display = "none";
