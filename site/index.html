@@ -67,6 +67,15 @@
   .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:4px 12px;font-size:11.5px;color:var(--fg2);display:flex;flex-direction:column;align-items:center;line-height:1.3}
   .stat b{font-size:14.5px;color:var(--fg);font-variant-numeric:tabular-nums}
   .stat b.ok{color:var(--ok)}
+  /* 「全部更新」也挂了 .cp，但 .cp 只在 .idxbar 下定义过；放进 .stats 时它没有任何样式，
+     于是渲染成浏览器默认按钮——深色描边 + 灰底，和旁边几个 .stat 盒子完全不搭。 */
+  .stats .cp{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:4px 12px;font-size:11.5px;color:var(--fg2);font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:5px;line-height:1.3;white-space:nowrap}
+  .stats .cp b{font-size:14.5px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+  .stats .cp:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--fg)}
+  .stats .cp:active{transform:translateY(1px)}
+  /* 点完留下的深色圈是默认 focus 描边：只给键盘导航留 :focus-visible，鼠标点击不再画圈 */
+  .stats .cp:focus{outline:none}
+  .stats .cp:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
   .idxbar{background:var(--accent-bg);border-bottom:1px solid rgba(0,168,184,.18)}
   .idxbar .in{max-width:1360px;margin:0 auto;padding:6px 26px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--accent-deep);flex-wrap:wrap}
