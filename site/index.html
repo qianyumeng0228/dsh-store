@@ -31,8 +31,8 @@
   html.inframe,html.inframe>body{overflow-y:hidden;height:auto}
   /* 宿主内：浮层按「当前可见窗口」定位，--vis-top / --vis-h 由 syncViewport() 维护 */
   html.inframe .mask{position:absolute;left:0;right:0;top:var(--vis-top,0px);height:var(--vis-h,100%);bottom:auto}
-  html.inframe .dock{position:absolute;top:calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px);bottom:auto;transform:translate(-50%,-100%)}
-  html.inframe .toast{position:absolute;top:calc(var(--vis-top,0px) + 74px);bottom:auto}
+  html.inframe .dock{position:absolute;top:var(--dock-top,calc(var(--vis-top,0px) + var(--vis-h,100%) - 18px));bottom:auto;transform:translate(-50%,-100%)}
+  html.inframe .toast{position:absolute;top:var(--toast-top,calc(var(--vis-top,0px) + 74px));bottom:auto}
   /* inset 是 top/right/bottom/left 的简写：同一条规则里写了 inset:auto，
      就会把上面那几个偏移一起重置成 auto，灯箱盒子直接塌成零尺寸（看着像"点了没反应"）。
      这里只覆盖需要的四个偏移 + 高度，不要再碰 inset。 */
@@ -946,12 +946,30 @@ function syncViewport(){
   const sr = sc.getBoundingClientRect();
   const visTop = Math.max(0, sr.top - fr.top);
   const visH = Math.max(120, Math.min(fr.height, sr.bottom - fr.top) - visTop);
-  const key = visTop + "x" + visH;
+  /* 浮层绝对不能越过内容末尾。本页在宿主里被 iframe 撑到内容高度，而 iframe 文档自己不滚，
+     所以视口坐标就是文档坐标：footer 底边即"内容真正的结束位置"。
+     之前 dock 的锚点直接取可见窗口底边，滚到底时它落在内容末尾之外，
+     自身高度就成了多出来的空白；而宿主侧撑高逻辑会把这份空白再算进内容高度 →
+     每个周期再长一截，越滚越大（不滚到底时又正常，就是"有时有有时没有"）。 */
+  const ft = document.querySelector("footer");
+  const contentH = ft ? Math.ceil(ft.getBoundingClientRect().bottom)
+                      : Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+  const dock = document.getElementById("dock");
+  const dockH = dock ? dock.offsetHeight : 0;
+  // dock 有 translateY(-100%)：CSS top 值就是它的下边缘
+  const dockTop = Math.max(dockH + 6, Math.min(visTop + visH - 18, contentH));
+  const toast = document.getElementById("toast");
+  const toastH = toast ? toast.offsetHeight : 0;
+  const toastTop = Math.max(0, Math.min(visTop + 74, Math.max(0, contentH - toastH - 6)));
+  const maskH = Math.max(120, Math.min(visH, contentH - visTop));
+  const key = visTop + "x" + maskH + "x" + dockTop + "x" + toastTop;
   if (key === _vpLast) return;
   _vpLast = key;
   const rs = document.documentElement.style;
   rs.setProperty("--vis-top", visTop + "px");
-  rs.setProperty("--vis-h", visH + "px");
+  rs.setProperty("--vis-h", maskH + "px");
+  rs.setProperty("--dock-top", dockTop + "px");
+  rs.setProperty("--toast-top", toastTop + "px");
 }
 
 function reportLayout(){
