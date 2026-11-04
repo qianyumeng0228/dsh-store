@@ -68,7 +68,11 @@ jobs:
         run: python pipeline/build.py
 
       # 把最新索引同步回仓库根目录，供 jsDelivr CDN 镜像（DSH 索引源加速备用）
-      # 内容未变化时不提交，避免触发循环构建
+      # 内容未变化时不提交，避免触发循环构建。
+      # 这一步排在 Stage site 之前：一轮构建 30-60 分钟，期间人随时可能 push，
+      # 裸 push 会被 non-fast-forward 拒掉 → 整个 build job 失败 → 后面的 Pages 部署
+      # 根本不跑，线上站点静默停在旧版（2026-11-04 实测踩过）。
+      # 所以这里 rebase 重试，实在推不上也只报 warning，绝不挡住部署。
       - name: Commit index.json to repo (jsDelivr mirror)
         run: |
           cp dist/index.json ./index.json
@@ -79,7 +83,22 @@ jobs:
           else
             git add index.json
             git commit -m "chore: update index.json [skip ci]"
-            git push origin main
+            pushed=0
+            for i in 1 2 3; do
+              if git push origin main; then pushed=1; break; fi
+              echo "push 被拒（远端在这轮构建期间动过），第 $i 次 rebase 后重试"
+              git fetch origin main || true
+              if ! git rebase origin/main; then
+                # 镜像文件冲突一律取本轮刚构建出来的那份（它就是最新的权威索引）
+                git checkout --theirs -- index.json 2>/dev/null || true
+                git add index.json 2>/dev/null || true
+                GIT_EDITOR=true git rebase --continue || { git rebase --abort; break; }
+              fi
+              sleep $((i * 10))
+            done
+            if [ "$pushed" != 1 ]; then
+              echo "::warning::index.json 没推上仓库（jsDelivr 会继续用上一版），但 Pages 部署照常继续"
+            fi
           fi
 
       - name: Stage site
