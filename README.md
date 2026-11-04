@@ -137,4 +137,4 @@ python pipeline/build.py                # 生成索引与网站
 - 分类由 tags 映射，无 tag 命中的插件落入「工具与能力」兜底。
 - 作者头像依赖 GitHub 头像 CDN（`github.com/<owner>.png`），网络受限时可能加载失败（前端已做 onerror 自动隐藏，不影响浏览）。
 - 定时构建不保证准点：`03:17 UTC` 的 schedule 曾延后到 10:32 才起跑，个别日子未触发。需要严格时效请改 `workflow_dispatch` 外部触发。
-- `site/index.html` 是 **本仓库为唯一来源**，`dsh-store-market` 内的同名副本由其 `sync-upstream` 工作流同步；改 UI 只改这里，宿主专用差异（iframe 不滚动）由页面运行时检测，不再靠两份文件各自维护。
+- `site/index.html` 是 **本仓库为唯一来源**，`dsh-plug-store` 内的同名副本由其 `sync-upstream` 工作流同步；改 UI 只改这里，宿主专用差异（iframe 不滚动）由页面运行时检测，不再靠两份文件各自维护。
