@@ -194,9 +194,15 @@
 
   /* ---------- 横滑分区 ---------- */
   .hscroll-sec{margin:6px 0 18px}
-  .hscroll-sec h3{font-size:14px;margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .hscroll-sec h3{font-size:14px;margin-bottom:9px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+  .hscroll-sec h3 .caret{width:14px;color:var(--fg3);font-size:11px;text-align:center}
+  .hscroll-sec h3 .hide{margin-left:auto;font-size:11.5px;color:var(--fg3);font-weight:400}
+  .hscroll-sec h3:hover .hide{color:var(--accent)}
   .hscroll-sec h3 .sub{font-size:11.5px;color:var(--fg3);font-weight:400}
   .hscroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}
+  /* 特异性陷阱：作者样式里的 display:flex 会盖掉 hidden 属性带来的 UA display:none，
+     折叠看着生效（属性写进去了）其实一行高度都没省下来。 */
+  .hscroll-sec .hscroll[hidden]{display:none}
   .hcard{flex:0 0 230px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .13s;scroll-snap-align:start;box-shadow:var(--shadow)}
   .hcard:hover{border-color:var(--accent);transform:translateY(-1px)}
   .hcard .hrow{display:flex;align-items:center;gap:7px;margin-bottom:5px;min-width:0}
@@ -1654,7 +1660,12 @@ function copyText(t, btn, okText){
   }).catch(()=>{ toast("复制失败，请手动复制"); });
 }
 
-/* ---------- 发现页横滑分区 ---------- */
+/* ---------- 发现页横滑分区 ----------
+   两块默认折叠（照插件市场的「隐藏这一块」交互）：它们占掉首屏近一半高度，
+   而折叠后整页变矮，宿主那侧的撑高逻辑现在能正确缩回去（见 §3.1 的教训）。 */
+function hsecState(){
+  try { return JSON.parse(localStorage.getItem("dsh-hsec") || "{}") || {}; } catch(e) { return {}; }
+}
 function renderHScroll(){
   const zone = document.getElementById("hscroll-zone");
   zone.style.display = "block";
@@ -1668,15 +1679,29 @@ function renderHScroll(){
       <div class="hbd">${updBadge(p)}${p.source==="npm"?`<span class="badge npm">npm</span>`:`<span class="badge git">git</span>`}${p.downloads?`<span class="badge dl">↓${fmtN(p.downloads)}</span>`:""}${p.official?`<span class="badge off">官方</span>`:""}</div>
     </div>`;
   }
-  zone.innerHTML = `
-    <div class="hscroll-sec">
-      <h3>🕘 最近收录 <span class="sub">按收录时间倒序 · 前 12</span></h3>
-      <div class="hscroll">${recent.map(hcard).join("")}</div>
-    </div>
-    <div class="hscroll-sec">
-      <h3>🔥 最多安装 <span class="sub">近 30 天下载量倒序 · 前 12</span></h3>
-      <div class="hscroll">${top.map(hcard).join("")}</div>
+  const st = hsecState();
+  function sec(key, ico, title, sub, list){
+    const open = st[key] === 1;      // 只认显式的 1，缺省即折叠
+    return `<div class="hscroll-sec">
+      <h3 data-sec="${key}" aria-expanded="${open}"><span class="caret">${open?"▾":"▸"}</span>${ico} ${title} <span class="sub">${sub}</span><span class="hide">${open?"隐藏这一块":"显示这一块"}</span></h3>
+      <div class="hscroll"${open?"":" hidden"}>${list.map(hcard).join("")}</div>
     </div>`;
+  }
+  zone.innerHTML = sec("recent","🕘","最近收录","按收录时间倒序 · 前 12",recent)
+                 + sec("top","🔥","最多安装","近 30 天下载量倒序 · 前 12",top);
+  zone.querySelectorAll(".hscroll-sec h3").forEach(h=>{
+    h.onclick = () => {
+      const key = h.dataset.sec;
+      const now = !(hsecState()[key] === 1);
+      const s2 = hsecState();
+      s2[key] = now ? 1 : 0;
+      localStorage.setItem("dsh-hsec", JSON.stringify(s2));
+      h.nextElementSibling.hidden = !now;
+      h.setAttribute("aria-expanded", String(now));
+      h.querySelector(".caret").textContent = now ? "▾" : "▸";
+      h.querySelector(".hide").textContent = now ? "隐藏这一块" : "显示这一块";
+    };
+  });
   zone.querySelectorAll(".hcard").forEach(el=>el.onclick=()=>{
     const p = DATA.plugins.find(x=>x.name===el.dataset.name);
     if (p) openModalByPlugin(p);
