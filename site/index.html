@@ -170,7 +170,18 @@
   .install-btn.mini{padding:6px 11px;font-size:12px}
   .btns{display:flex;gap:6px;align-items:center;width:100%}
   .btns .install-btn{flex:1}
+  /* 热开关：写 profile 的用户补丁层（- id + disabled），HMR 约 1 秒重新 compose，不用重启 */
+  .sw{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:11.5px;color:var(--fg2);flex-shrink:0}
+  .sw i{width:32px;height:18px;border-radius:999px;background:var(--line2);position:relative;transition:background .16s;flex-shrink:0}
+  .sw i::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(20,40,80,.28);transition:left .16s}
+  .sw.on i{background:var(--ok)}
+  .sw.on i::after{left:16px}
+  .sw.part i{background:var(--warn)}
+  .sw.part i::after{left:9px}
+  .sw.off-state{color:var(--fg3)}
+  .sw.busy{opacity:.5;pointer-events:none}
   .badge.inst{color:var(--ok);border-color:rgba(18,161,80,.35);background:var(--ok-bg)}
+  .badge.disab{color:var(--warn);border-color:rgba(217,119,6,.35);background:var(--warn-bg)}
   .ops{display:flex;gap:4px}
   .op{width:27px;height:27px;border-radius:7px;border:1px solid var(--line);background:var(--bg2);color:var(--fg3);font-size:13px;cursor:pointer;line-height:1;transition:all .12s}
   .op:hover{border-color:var(--accent);color:var(--accent-deep)}
@@ -617,9 +628,32 @@ function installedExtras(){
 }
 /* 主按钮反映本机状态。已安装时不再把「已安装」做成按钮 —— 它看着像状态标签，
    点下去却执行卸载，既不明显也危险。状态交给徽标，按钮一律是明确动作：更新 / 卸载。 */
+/* 热启停：条目 id 由宿主从包的 dsh.bundle.patch 解析，状态读用户补丁层里最后的旗标。
+   没有条目（纯依赖 / carrier）或被保护的宿主基础设施一律不出开关 —— 点了没意义，
+   或者会把承载这套开关的链条自己关掉。 */
+function toggleInfoOf(p){
+  if (!HOST || !p) return null;
+  const repo = p.repo ? String(p.repo).toLowerCase() : "";
+  const d = installedDetails.find(x => x && (x.name === p.name ||
+    (repo && x.repo && String(x.repo).toLowerCase() === repo)));
+  if (!d || d.protected || !Array.isArray(d.rowIds) || !d.rowIds.length) return null;
+  return { key: d.name, state: d.rowState || "on", ids: d.rowIds };
+}
+function switchHtml(p){
+  const t = toggleInfoOf(p);
+  if (!t) return "";
+  const cls = t.state === "off" ? "off-state" : t.state === "mixed" ? "part" : "on";
+  const label = t.state === "off" ? "已停用" : t.state === "mixed" ? "部分停用" : "启用中";
+  const tip = "热开关：写入 profile 的用户补丁层，约 1 秒内生效，不用重启"
+    + (t.state === "mixed" ? "；这个 bundle 有多个条目，当前只停了其中一部分" : "");
+  return `<span class="sw ${cls}" data-sw="${esc(t.key)}" title="${esc(tip)}"><i></i>${label}</span>`;
+}
 function mainBtnHtml(p, i){
-  if (p.localOnly)
-    return `<button class="install-btn danger" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`;
+  const sw = switchHtml(p);
+  if (p.localOnly){
+    const btn = `<button class="install-btn danger" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`;
+    return sw ? `<div class="btns">${sw}${btn}</div>` : btn;
+  }
   if (!isInstalled(p))
     return p.installable
       ? `<button class="install-btn" data-inst="${i}" data-act="install" title="${HOST?"真实安装到 DSH":"复制安装命令"}">安装</button>`
@@ -629,7 +663,7 @@ function mainBtnHtml(p, i){
   const acts = [];
   if (updateAvailable(p)) acts.push(`<button class="install-btn upd" data-inst="${i}" data-act="update" title="升级到 v${esc(updateTargetOf(p))}（本机 ${esc(normVer(installedSpecOf(p)) || "未知")}）">更新</button>`);
   acts.push(`<button class="install-btn danger${updateAvailable(p)?" mini":""}" data-inst="${i}" data-act="uninstall" title="从 DSH 卸载">卸载</button>`);
-  return `<div class="btns">${acts.join("")}</div>`;
+  return `<div class="btns">${sw}${acts.join("")}</div>`;
 }
 
 /* ---------- 宿主模式（dsh-plug-store 插件内运行时启用） ---------- */
@@ -827,6 +861,31 @@ async function hostUninstall(p){
   const shown = (p && p.name) || key;
   if (!confirm("确认从 DSH 卸载「" + shown + "」？" + (key !== shown ? "（本机依赖键 " + key + "）" : ""))) return;
   submitOp("uninstall", p);
+}
+/* 热启停：不排队、不走任务面板 —— 它只是改补丁层里一行旗标，秒级完成，
+   而且必须立刻反映到界面（开关状态就是刚写进去的那个）。 */
+async function hostToggle(key, el){
+  if (!HOST) return;
+  const turnOff = el.classList.contains("on") || el.classList.contains("part");
+  el.classList.add("busy");
+  try {
+    const r = await apiFetch("api/toggle", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: key, disabled: turnOff }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok){
+      toast("✗ " + (d.error || ("启停失败 HTTP " + r.status)));
+      return;
+    }
+    toast((d.disabled ? "已停用 " : "已启用 ") + key + "（约 1 秒内热生效，不用重启）");
+    await refreshInstalled();
+    render();
+  } catch(e){
+    toast("✗ 启停请求失败：" + ((e && e.message) || e));
+  } finally {
+    if (el && el.classList) el.classList.remove("busy");
+  }
 }
 async function hostUpdateOne(p, btn){
   if (btn){ btn.textContent = "已提交"; btn.disabled = true; }
@@ -1294,6 +1353,8 @@ function badges(p){
   if (isNew(p)) h += `<span class="badge new">新增</span>`;
   h += updBadge(p);
   if (isInstalled(p)) h += `<span class="badge inst">已安装</span>`;
+  const ti = toggleInfoOf(p);
+  if (ti && ti.state !== "on") h += `<span class="badge disab" title="补丁层里这个插件的 loader 条目被停用，约 1 秒内热生效">${ti.state === "mixed" ? "部分停用" : "已停用"}</span>`;
   if (state.tab==="installed" && (HOST ? updateAvailable(p) : p.hasUpdate)) h += `<span class="badge upd2">可更新</span>`;
   if (p.version) h += `<span class="badge ver">v${esc(p.version)}</span>`;
   if (p.source==="npm" && p.downloads) h += `<span class="badge dl">↓ ${fmtN(p.downloads)}</span>`;
@@ -1593,6 +1654,10 @@ function wireCards(list, gridEl){
     if (act==="update"){ hostUpdateOne(p, b); return; }
     if (HOST){ hostInstall(p, b); return; }
     if (p.install) copyText(p.install, b, "✓ 已复制");
+  });
+  document.querySelectorAll(".sw").forEach(el=>el.onclick=e=>{
+    e.stopPropagation();
+    hostToggle(el.dataset.sw, el);
   });
   document.querySelectorAll(".op").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
