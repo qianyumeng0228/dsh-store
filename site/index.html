@@ -764,17 +764,20 @@ async function submitOp(kind, p){
 }
 
 async function clearOps(){
+  const busy = activeCount();
+  if (busy && !confirm("将清除已结束的记录，并取消 " + busy + " 个排队中/正在跑的任务。\n被取消的更新之后可以点重试。继续？")) return;
   try {
     const r = await apiFetch("api/tasks/clear", { method:"POST" });
     const d = await r.json().catch(()=>({}));
     if (!r.ok) { toast("✗ 清除失败：" + String(d.error || ("HTTP " + r.status))); return; }
-    // 服务端只删已结束的记录，这里同步把本地对应行也丢掉
+    // 服务端删已结束的记录;被取消的行留在列表里等轮询刷新成"已取消"
     const gone = new Set((d.cleared || []).map(String));
     ops = ops.filter(t => !gone.has(String(t.id)));
     pendingOps = pendingOps.filter(x => x.state === "queued" || !gone.has(String(x.serverId || x.id)));
     opPrev.clear(); opDoneCount = 0; opFailCount = 0;
     renderDock();
-    toast(gone.size ? "已清除 " + gone.size + " 条记录" : "没有可清除的记录");
+    toast((gone.size ? "已清除 " + gone.size + " 条记录" : "没有可清除的记录") +
+          (d.cancelled ? "，取消 " + d.cancelled + " 个任务" : ""));
   } catch(e){ toast("✗ 清除失败：" + String((e && e.message) || e)); }
 }
 
@@ -1988,7 +1991,7 @@ function renderDock(){
   if (rows.length){
     const busy = rows.some(t => t.state === "queued" || t.state === "running");
     html += `<div class="dock-sec">任务 · 安装/更新/卸载实时进度（百分比按 pnpm 阶段估算）` +
-      `<button class="clr" id="ops-clear" title="只清除已结束的记录，正在跑与排队中的保留">${busy ? "清除已完成" : "清除记录"}</button></div>`;
+      `<button class="clr" id="ops-clear" title="清除已结束的记录;有任务在跑时同时取消排队中与正在跑的任务">${busy ? "清除并取消队列" : "清除记录"}</button></div>`;
     html += rows.map(opRowHtml).join("");
   }
   html += `<div class="dock-sec">待装清单</div>`;
