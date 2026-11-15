@@ -1149,9 +1149,44 @@ async function load(){
     }, {passive:true});
     setTimeout(reportLayout, 1200);
     setTimeout(reportLayout, 3000);
+    /* 宿主缓存过期时先回旧快照、后台拉线上最新（x-data-stale: 1）。
+       不自动重取的话，隔几天再打开会一直停在旧数字上，看着像商店挂了。 */
+    if (HOST && r.headers.get("x-data-stale") === "1"){
+      toast("本地数据较旧，正在后台同步最新目录…");
+      scheduleResync();
+    }
   } catch(e){
     loading.innerHTML = "数据加载失败（" + esc(e.message) + "）<br><span style='font-size:12px'>请检查网络后刷新重试</span>";
   }
+}
+/* 后台同步完成前定时重取；拿到更新的 updated 就整体换数据并重渲染。
+   20MB 快照下载要几十秒，15/45/90s 三档重试，头不再标 stale 即停。 */
+function scheduleResync(){
+  const delays = [15000, 45000, 90000];
+  let i = 0;
+  const tick = async () => {
+    let stillStale = true;
+    try {
+      const r = await fetch("data/plugins.json");
+      stillStale = r.headers.get("x-data-stale") === "1";
+      if (r.ok){
+        const d = await r.json();
+        if (d && d.updated && DATA && d.updated !== DATA.updated){
+          DATA = d;
+          document.getElementById("st-total").textContent = DATA.total;
+          document.getElementById("st-ok").textContent = DATA.installable;
+          document.getElementById("st-new").textContent = DATA.plugins.filter(isNew).length;
+          document.getElementById("st-upd").textContent = (DATA.updated||"").replace(/ \d+:\d+ UTC/,"");
+          refreshUpdBadge(); buildTabbar(); render();
+          toast("已同步最新目录：共 " + DATA.total + " 个插件");
+          return;
+        }
+      }
+    } catch(e){}
+    if (!stillStale) return;
+    if (i < delays.length) setTimeout(tick, delays[i++]);
+  };
+  setTimeout(tick, delays[i++]);
 }
 function isNew(p){
   const a = (p.added||"").slice(0,10);
