@@ -4,6 +4,7 @@
 - git 插件：只收录已补齐 commit 的（incremental.py 负责补齐）
 """
 import json
+import re
 import shutil
 import sqlite3
 import sys
@@ -20,6 +21,15 @@ import translate
 
 NPM_REGISTRY = "https://registry.npmjs.org"
 NPM_MIRROR = "https://registry.npmmirror.com"
+
+# format-1 的 path/directory 段只允许这些字符（宿主校验器 PATH_SEGMENT），
+# 含中文/空格的 monorepo 子目录无法表达，据此判定可安装性。
+PATH_SEGMENT = re.compile(r"^[A-Za-z0-9._@+-]+$")
+
+
+def valid_package_path(p):
+    return bool(p) and all(
+        seg not in (".", "..") and PATH_SEGMENT.match(seg) for seg in p.split("/"))
 
 
 def http_get_json(url, timeout=20, retries=2):
@@ -189,6 +199,7 @@ def main():
     seen_names = set()
     cat_stats = {}
     skipped_git_nocommit = 0
+    skipped_badpath = 0
     dup = 0
     qualified = 0
     tr_candidates = []   # (英文原文, site 条目引用, index 条目引用)，组装完统一机翻
@@ -262,12 +273,17 @@ def main():
             src = {"type": "npm", "registry": NPM_REGISTRY}
         elif git_commit:
             # git 源，或 npm 版本还没补上：先按 commit 装，补齐版本后升级为 npm
-            installable = True
-            src = {"type": "git", "url": f"https://github.com/{repo}", "commit": git_commit}
-            # monorepo 子目录：参考索引把 path 同时放进 source 与 repository.directory，
-            # 只写 directory 的话宿主会装到仓库根
-            if path:
-                src["path"] = path
+            if path and not valid_package_path(path):
+                # 子目录含中文/空格，format-1 的 path 段无法表达；省略 path 会装到
+                # 仓库根（装错包），所以不收录为可安装，仍作为浏览占位留在索引里
+                skipped_badpath += 1
+            else:
+                installable = True
+                src = {"type": "git", "url": f"https://github.com/{repo}", "commit": git_commit}
+                # monorepo 子目录：参考索引把 path 同时放进 source 与 repository.directory，
+                # 只写 directory 的话宿主会装到仓库根
+                if path:
+                    src["path"] = path
         else:
             skipped_git_nocommit += 1
 
@@ -276,6 +292,10 @@ def main():
             if owner:
                 pname = f"{owner}-{pname}"
                 qualified += 1
+
+        # format-1 的 name 必须是合法 npm 包名（全小写）；git 条目名取自仓库末段，
+        # 可能含大写，统一小写化（实测 286 个，小写后无撞名）
+        pname = pname.lower()
 
         if pname in seen_names:
             dup += 1
@@ -302,15 +322,11 @@ def main():
             }
             if ts:
                 ver_obj["publishTimestamp"] = ts
+        # 宿主校验器只校验「出现的键」：可选字段一旦存在就必须非空/合法，
+        # 所以空 icon/author/homepage/repository 一律省略，而不是写 "" / {}。
         entry = {
             "name": pname,
             "title": {"en": title_en or pname, "zh": title_zh or title_en or pname},
-            "description": {"en": desc_en or "", "zh": desc_zh or ""},
-            "author": author,
-            "avatar": avatar,
-            "icon": icon,
-            "homepage": f"https://github.com/{repo}#readme" if repo else "",
-            "repository": {"url": f"https://github.com/{repo}"} if repo else {},
             "metadata": {
                 "category": cat_key,
                 "keywords": tags,
@@ -318,8 +334,28 @@ def main():
                 "sortKeys": {"github-stars": stars},
             },
         }
-        if path:
-            entry["repository"]["directory"] = path
+        # description 是 localizedText：成员必须非空且至少含 en；只有中文时 en 回落中文
+        desc = {}
+        if desc_en and desc_en.strip():
+            desc["en"] = desc_en
+        if desc_zh and desc_zh.strip():
+            desc["zh"] = desc_zh
+        if desc and "en" not in desc:
+            desc["en"] = desc["zh"]
+        if desc:
+            entry["description"] = desc
+        if author:
+            entry["author"] = author
+        if avatar:
+            entry["avatar"] = avatar
+        if icon:
+            entry["icon"] = icon
+        if repo:
+            entry["homepage"] = f"https://github.com/{repo}#readme"
+            entry["repository"] = {"url": f"https://github.com/{repo}"}
+            # directory 仅展示用；含非法段（中文/空格）时省略，npm 安装不受影响
+            if path and valid_package_path(path):
+                entry["repository"]["directory"] = path
         if installable:
             entry["versions"] = [ver_obj]
         plugins_out.append(entry)
@@ -346,7 +382,7 @@ def main():
         })
         cat_stats[cat_key] = cat_stats.get(cat_key, 0) + 1
         # 最终展示的描述里没有中文、又有英文原文可翻的，才进机翻队列
-        if desc_en and not translate.has_cjk(desc_zh or desc_en or ""):
+        if desc_en and desc_en.strip() and not translate.has_cjk(desc_zh or desc_en or ""):
             tr_candidates.append((desc_en, site_plugins[-1], entry))
 
     # ---- 描述机翻（中文优先）----
@@ -385,14 +421,18 @@ def main():
         "metadata": {
             "categories": categories_meta,
             "labels": {},
-            "sortKeys": {},
+            # 每个插件都带 sortKeys.github-stars，索引级必须声明它（含 order + 本地化标题），
+            # 否则宿主校验器对全部条目报「references undeclared id」
+            "sortKeys": {
+                "github-stars": {"title": {"en": "GitHub stars", "zh": "GitHub 星标"}, "order": "desc"},
+            },
         },
         "plugins": plugins_out,
     }
     (config.DIST_DIR / "index.json").write_text(
         json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"[build] index.json: {len(plugins_out)} 条可索引（含不可装占位 {skipped_git_nocommit}，"
-          f"撞名限定 {qualified}，重复合并 {dup}）")
+          f"非法子目录路径不可装 {skipped_badpath}，撞名限定 {qualified}，重复合并 {dup}）")
 
     # ---- 可直接粘进宿主 Discover 的索引源 ----
     # 全量索引里过半条目没有 versions（浏览目录要它们，装了没有意义）。宿主原生
